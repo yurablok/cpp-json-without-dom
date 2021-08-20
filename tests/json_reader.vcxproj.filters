@@ -1,0 +1,61 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="tests">
+      <UniqueIdentifier>{cd0568b6-2577-4b78-9eec-c5abb20b8b33}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="tests\minijson_reader">
+      <UniqueIdentifier>{179f65d7-35e4-46e2-a496-feb2f74f0c41}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="tests\minijson_writer">
+      <UniqueIdentifier>{c65f310e-4c45-4de6-94f3-dc8d173a3d4c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="tests\nlohmann_json">
+      <UniqueIdentifier>{765bfca7-a074-4f27-a75a-42008861c7fb}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="tests\nlohmann_json\single_include">
+      <UniqueIdentifier>{afb11233-10bd-40fc-afbc-990c5ba8b033}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="tests\nlohmann_json\single_include\nlohmann">
+      <UniqueIdentifier>{9cc8f073-f816-4649-97f9-36d4c0748997}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="tests\rapidjson">
+      <UniqueIdentifier>{196811d9-3ef8-4e46-87bc-686b307a7cc7}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="tests\rapidjson\include">
+      <UniqueIdentifier>{82345053-7676-436b-9506-dc57e245e81d}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="tests\rapidjson\include\rapidjson">
+      <UniqueIdentifier>{7e930837-423f-4519-ba35-ba9fab217a85}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="tests\switch-str">
+      <UniqueIdentifier>{fe8583e8-ea15-44c7-b7eb-6b172d684c98}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="tests.cpp">
+      <Filter>tests</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\cpp_json_without_dom.hpp" />
+    <ClInclude Include="minijson_reader\minijson_reader.hpp">
+      <Filter>tests\minijson_reader</Filter>
+    </ClInclude>
+    <ClInclude Include="minijson_writer\minijson_writer.hpp">
+      <Filter>tests\minijson_writer</Filter>
+    </ClInclude>
+    <ClInclude Include="nlohmann_json\single_include\nlohmann\json.hpp">
+      <Filter>tests\nlohmann_json\single_include\nlohmann</Filter>
+    </ClInclude>
+    <ClInclude Include="rapidjson\include\rapidjson\document.h">
+      <Filter>tests\rapidjson\include\rapidjson</Filter>
+    </ClInclude>
+    <ClInclude Include="switch-str\switch_str.hpp">
+      <Filter>tests\switch-str</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="..\README.md" />
+  </ItemGroup>
+</Project>

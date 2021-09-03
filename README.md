@@ -84,7 +84,7 @@ json.parse([&json](const json_parse::key_t& key, const json_parse::value_t& valu
             }
             return true; // true means a processed item, otherwise return false to skip
         });
-        break;
+        return true; // always return true after calling the parse
     }
     default:
         return false;

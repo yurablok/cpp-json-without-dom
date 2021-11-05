@@ -55,7 +55,7 @@ For faster key matching, it is recommended to use
 ```cpp
 json_reader json;
 json = string_to_parse;
-json.parse([&json](const json_parse::key_t& key, const json_parse::value_t& value) {
+json.parse([&json](json_parse::key_t key, const json_parse::value_t& value) {
     switch_str(key, "number", "array") {
     case_str("number"):
         if (!value.is_number()) {
@@ -68,7 +68,7 @@ json.parse([&json](const json_parse::key_t& key, const json_parse::value_t& valu
             return false;
         }
         uint8_t index = 0;
-        json.parse([&index](const json_parse::key_t& key, const json_parse::value_t& value) {
+        json.parse([&index](json_parse::key_t key, const json_parse::value_t& value) {
             switch (index++) {
             case 0:
                 assert(value.is_string());

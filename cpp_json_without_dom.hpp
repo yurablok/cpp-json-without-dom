@@ -21,7 +21,7 @@ struct json_reader {
     const char* begin = nullptr;
     const char* end = nullptr; // begin + size
     const char* error = nullptr; // check after parse
-    void operator=(const std::string_view& json) {
+    void operator=(const std::string_view json) {
         begin = json.data();
         end = json.data() + json.size();
         error = nullptr;
@@ -50,7 +50,7 @@ struct json_reader {
         bool is_string() const {
             return index() == string_idx;
         }
-        const std::string_view& as_string() const {
+        const std::string_view as_string() const {
             return std::get<string_idx>(*this);
         }
         bool is_boolean() const {
@@ -72,7 +72,7 @@ struct json_reader {
 
     // handler -> true  if processed
     // handler -> false if skipped
-    void parse(std::function<bool(const key_t& key, const value_t& value)> handler) {
+    void parse(std::function<bool(key_t key, const value_t& value)> handler) {
         if (error != nullptr) {
             return;
         }
@@ -408,7 +408,7 @@ private:
             buffer.push_back(' ');
         }
     }
-    void string(const std::string_view& str) {
+    void string(const std::string_view str) {
         for (const auto c : str) {
             switch (c) {
             case '"':
@@ -514,7 +514,7 @@ public:
             writer->buffer.push_back(',');
             return { writer };
         }
-        object_t value(const std::string_view& string) {
+        object_t value(const std::string_view string) {
             writer->tab(false);
             writer->buffer.push_back('"');
             writer->string(string);
@@ -549,7 +549,7 @@ public:
         json_writer* writer = nullptr;
     };
     struct object_t {
-        value_t key(const std::string_view& string) {
+        value_t key(const std::string_view string) {
             writer->tab(false);
             writer->buffer.push_back('"');
             writer->string(string);
@@ -559,7 +559,7 @@ public:
             writer->isPrevKey = true;
             return { writer };
         }
-        object_t comment(const std::string_view& line) {
+        object_t comment(const std::string_view line) {
             writer->tab(false);
             writer->buffer.push_back('/');
             writer->buffer.push_back('/');
@@ -633,7 +633,7 @@ public:
             writer->buffer.push_back(',');
             return *this;
         }
-        array_t& value(const std::string_view& string) {
+        array_t& value(const std::string_view string) {
             writer->tab(false);
             writer->buffer.push_back('"');
             writer->string(string);
@@ -662,7 +662,7 @@ public:
             writer->buffer.push_back(',');
             return *this;
         }
-        array_t& comment(const std::string_view& line) {
+        array_t& comment(const std::string_view line) {
             writer->tab(false);
             writer->buffer.push_back('/');
             writer->buffer.push_back('/');

@@ -46,7 +46,7 @@ void test() {
         // {}
         writer.object(nullptr);
         reader = writer.buffer;
-        reader.parse([](const json_reader::key_t& key, const json_reader::value_t& value) {
+        reader.parse([](json_reader::key_t key, const json_reader::value_t& value) {
             assert(false);
             return true;
         });
@@ -56,7 +56,7 @@ void test() {
         // []
         writer.array(nullptr);
         reader = writer.buffer;
-        reader.parse([](const json_reader::key_t& key, const json_reader::value_t& value) {
+        reader.parse([](json_reader::key_t key, const json_reader::value_t& value) {
             assert(false);
             return true;
         });
@@ -85,7 +85,7 @@ void test() {
             .key("number").value(-123.456e-7);
         });
         reader = writer.buffer;
-        reader.parse([](const json_reader::key_t& key, const json_reader::value_t& value) {
+        reader.parse([](json_reader::key_t key, const json_reader::value_t& value) {
             switch_str(key, "first", "es\"ca\"pe", "unicode", "boolean", "special", "number") {
             case_str("first"):
                 assert(value.as_string() == "second");
@@ -149,21 +149,21 @@ void test() {
             });
         });
         reader = writer.buffer;
-        reader.parse([&reader](const json_reader::key_t& key, const json_reader::value_t& value) {
+        reader.parse([&reader](json_reader::key_t key, const json_reader::value_t& value) {
             switch_str(key, "aa", "cc") {
             case_str("aa"):
                 assert(value.as_string() == "bb");
                 break;
             case_str("cc"):
                 assert(value.is_object());
-                reader.parse([&reader](const json_reader::key_t& key, const json_reader::value_t& value) {
+                reader.parse([&reader](json_reader::key_t key, const json_reader::value_t& value) {
                     switch_str(key, "dd", "ee") {
                     case_str("dd") :
                         assert(value.is_object());
                         return false; // skip
                     case_str("ee") :
                         assert(value.is_object());
-                        reader.parse([](const json_reader::key_t& key, const json_reader::value_t& value) {
+                        reader.parse([](json_reader::key_t key, const json_reader::value_t& value) {
                             assert(key == "ff");
                             assert(value.as_string() == "gg");
                             return true;
@@ -218,14 +218,14 @@ void test() {
             });
         });
         reader = writer.buffer;
-        reader.parse([&reader](const json_reader::key_t& key, const json_reader::value_t& value) {
+        reader.parse([&reader](json_reader::key_t key, const json_reader::value_t& value) {
             assert(key.empty());
             assert(value.is_object());
-            reader.parse([&reader](const json_reader::key_t& key, const json_reader::value_t& value) {
+            reader.parse([&reader](json_reader::key_t key, const json_reader::value_t& value) {
                 assert(key == "aa");
                 assert(value.is_array());
                 uint8_t index = 0;
-                reader.parse([&reader, &index](const json_reader::key_t& key, const json_reader::value_t& value) {
+                reader.parse([&reader, &index](json_reader::key_t key, const json_reader::value_t& value) {
                     assert(key.empty());
                     switch (index++) {
                     case 0:
@@ -233,7 +233,7 @@ void test() {
                         break;
                     case 1:
                         assert(value.is_object());
-                        reader.parse([&reader](const json_reader::key_t& key, const json_reader::value_t& value) {
+                        reader.parse([&reader](json_reader::key_t key, const json_reader::value_t& value) {
                             assert(key == "bb");
                             assert(value.as_string() == "cc");
                             return true;
@@ -241,10 +241,10 @@ void test() {
                         break;
                     case 2:
                         assert(value.is_object());
-                        reader.parse([&reader](const json_reader::key_t& key, const json_reader::value_t& value) {
+                        reader.parse([&reader](json_reader::key_t key, const json_reader::value_t& value) {
                             assert(key == "dd");
                             assert(value.is_array());
-                            reader.parse([&reader](const json_reader::key_t& key, const json_reader::value_t& value) {
+                            reader.parse([&reader](json_reader::key_t key, const json_reader::value_t& value) {
                                 assert(key.empty());
                                 assert(value.as_number() == 34);
                                 return true;
@@ -589,7 +589,7 @@ void benchmark() {
                     minijson::ignore(json);
                     return;
                 }
-                minijson::parse_object(json, [&](const std::string_view& key, const minijson::value& value) {
+                minijson::parse_object(json, [&](const std::string_view key, const minijson::value& value) {
                     switch_str(key, "name", "id", "email", "phones", "employment") {
                     case_str("name"):
                         if (value.type() != minijson::String) {
@@ -622,7 +622,7 @@ void benchmark() {
                                 minijson::ignore(json);
                                 return;
                             }
-                            minijson::parse_object(json, [&](const std::string_view& key, const minijson::value& value) {
+                            minijson::parse_object(json, [&](const std::string_view key, const minijson::value& value) {
                                 switch_str(key, "number", "type") {
                                 case_str("number"):
                                     if (value.type() != minijson::String) {
@@ -650,7 +650,7 @@ void benchmark() {
                             minijson::ignore(json);
                             break;
                         }
-                        minijson::parse_object(json, [&](const std::string_view& key, const minijson::value& value) {
+                        minijson::parse_object(json, [&](const std::string_view key, const minijson::value& value) {
                             switch_str(key, "variant", "text") {
                             case_str("variant"):
                                 if (value.type() != minijson::String) {
@@ -739,11 +739,11 @@ void benchmark() {
         for (uint32_t i = 0; i < repsi; ++i) {
             json_reader json;
             json = addressbookJson;
-            json.parse([&](const json_reader::key_t& key, const json_reader::value_t& value) {
+            json.parse([&](json_reader::key_t key, const json_reader::value_t& value) {
                 if (!value.is_object()) {
                     return false;
                 }
-                json.parse([&](const json_reader::key_t& key, const json_reader::value_t& value) {
+                json.parse([&](json_reader::key_t key, const json_reader::value_t& value) {
                     switch_str(key, "name", "id", "email", "phones", "employment") {
                     case_str("name"):
                         if (!value.is_string()) {
@@ -767,11 +767,11 @@ void benchmark() {
                         if (!value.is_array()) {
                             return false;
                         }
-                        json.parse([&](const json_reader::key_t& key, const json_reader::value_t& value) {
+                        json.parse([&](json_reader::key_t key, const json_reader::value_t& value) {
                             if (!value.is_object()) {
                                 return false;
                             }
-                            json.parse([&](const json_reader::key_t& key, const json_reader::value_t& value) {
+                            json.parse([&](json_reader::key_t key, const json_reader::value_t& value) {
                                 switch_str(key, "number", "type") {
                                 case_str("number"):
                                     if (!value.is_string()) {
@@ -797,7 +797,7 @@ void benchmark() {
                         if (!value.is_object()) {
                             return false;
                         }
-                        json.parse([&](const json_reader::key_t& key, const json_reader::value_t& value) {
+                        json.parse([&](json_reader::key_t key, const json_reader::value_t& value) {
                             switch_str(key, "variant", "text") {
                             case_str("variant"):
                                 if (!value.is_string()) {

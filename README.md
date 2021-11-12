@@ -1,6 +1,6 @@
 # C++ JSON without DOM
 
-C++17 callback-based DOM-less parsing and generating JSON messages.
+C++17(11`*`) callback-based DOM-less parsing and generating JSON messages.
 
 ### Applicability:
 
@@ -14,10 +14,13 @@ a simplicity of the format.
 ### Benefits and features:
 
 - fast (see comparison)
-- minimal API, single header ~700 LOC
+- minimal API, single header ~780 LOC
 - one-pass parser without intermediate DOM representation 
 - zero-copy parse if no escape (`\`)
 - single line comments (`// ...`)
+- `*` C++11 support by using of third-party libs
+  ([string_view](https://github.com/martinmoene/string-view-lite)
+  and [variant](https://github.com/mpark/variant))
 
 ### Basic example:
 

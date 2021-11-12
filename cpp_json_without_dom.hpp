@@ -1,21 +1,73 @@
 // C++ JSON without DOM
 //
-// C++17 callback-based DOM-less parsing and generating JSON messages.
+// C++17(11*) callback-based DOM-less parsing and generating JSON messages.
 //
 // Author: Yurii Blok
 // License: BSL-1.0
 // https://github.com/yurablok/cpp-json-without-dom
 // History:
+// v0.2 2021-Nov-15     C++11 support by using of third-party libs.
 // v0.1 2021-Aug-23     First release.
 
 #pragma once
 #include <string>
-#include <string_view>
-#include <variant>
-#include <type_traits>
 #include <functional>
-#include <optional>
-#include <charconv>
+#include <type_traits>
+
+#if defined(_MSVC_LANG)
+#   if _MSVC_LANG >= 201703L
+#       define CJWD_CPP17_OR_GREATER
+#   endif
+#elif __cplusplus >= 201703L
+#   define CJWD_CPP17_OR_GREATER
+#endif
+
+#if defined(CJWD_CPP17_OR_GREATER)
+#   include <string_view>
+#   include <variant>
+#   include <charconv>
+#else
+#   include "string_view.hpp" // https://github.com/martinmoene/string-view-lite
+#   include "variant.hpp" // https://github.com/mpark/variant
+namespace std {
+    using string_view = nonstd::string_view;
+    template <typename... args_t>
+
+    using variant = mpark::variant<args_t...>;
+    template <std::size_t I, typename... args_t>
+    inline mpark::variant_alternative_t<I, variant<args_t...>>& get(variant<args_t...>& v) {
+        return mpark::get<I>(v);
+    }
+    template <std::size_t I, typename... args_t>
+    inline mpark::variant_alternative_t<I, variant<args_t...>>&& get(variant<args_t...>&& v) {
+        return mpark::get<I>(std::move(v));
+    }
+    template <std::size_t I, typename... args_t>
+    inline const mpark::variant_alternative_t<I, variant<args_t...>>& get(const variant<args_t...>& v) {
+        return mpark::get<I>(v);
+    }
+    template <std::size_t I, typename... args_t>
+    inline const mpark::variant_alternative_t<I, variant<args_t...>>&& get(const variant<args_t...>&& v) {
+        return mpark::get<I>(std::move(v));
+    }
+    template <typename T, typename... args_t>
+    inline T& get(variant<args_t...>& v) {
+        return mpark::get<T>(v);
+    }
+    template <typename T, typename... args_t>
+    inline T&& get(variant<args_t...>&& v) {
+        return mpark::get<T>(std::move(v));
+    }
+    template <typename T, typename... args_t>
+    inline const T& get(const variant<args_t...>& v) {
+        return mpark::get<T>(v);
+    }
+    template <typename T, typename... args_t>
+    inline const T&& get(const variant<args_t...>&& v) {
+        return mpark::get<T>(std::move(v));
+    }
+}
+#endif
 
 struct json_reader {
     const char* begin = nullptr;
@@ -197,7 +249,7 @@ struct json_reader {
                     beginStr = begin + 1;
                     isStringWithEscape = false;
                     break;
-                case '-': // case '+':
+                case '-': case '+':
                 case '0': case '1': case '2': case '3': case '4':
                 case '5': case '6': case '7': case '8': case '9':
                     step = steps::number;
@@ -244,18 +296,28 @@ struct json_reader {
                 break;
             case steps::number:
                 switch (*begin) {
-                case '-': // case '+':
+                case '-': case '+':
                 case '0': case '1': case '2': case '3': case '4':
                 case '5': case '6': case '7': case '8': case '9':
                 case '.': case 'e': case 'E':
                     break;
                 default:
                     double v = 0.0;
+#               if defined(CJWD_CPP17_OR_GREATER)
                     auto [ptr, ec] = std::from_chars(beginStr, begin, v);
                     if (ptr != begin || ec != std::errc()) {
                         error = ptr;
                         return;
                     }
+#               else
+                    char format[8];
+                    std::snprintf(format, sizeof(format), "%%%ulf",
+                        static_cast<uint32_t>(begin - beginStr));
+                    if (std::sscanf(beginStr, format, &v) != 1) {
+                        error = beginStr;
+                        return;
+                    }
+#               endif
                     step = steps::next;
                     --begin;
                     if (!handler) {
@@ -401,8 +463,8 @@ private:
         }
         if (removeComma && lastComma) {
             buffer[lastComma] = ' ';
-            lastComma = 0;
         }
+        lastComma = 0;
         buffer.push_back('\n');
         for (uint8_t i = 0; i < level * tabSize; ++i) {
             buffer.push_back(' ');
@@ -484,7 +546,7 @@ public:
             return { writer };
         }
         template <typename bool_t,
-            std::enable_if_t<std::is_same_v<bool_t, bool>, int> = 0>
+            typename = typename std::enable_if<std::is_same<bool_t, bool>::value>::type>
         object_t value(const bool_t boolean) {
             writer->tab(false);
             if (boolean) {
@@ -527,6 +589,7 @@ public:
             writer->tab(false);
             const auto size = writer->buffer.size();
             writer->buffer.resize(size + 32);
+#       if defined(CJWD_CPP17_OR_GREATER)
             const auto [ptr, ec] = std::to_chars(
                 writer->buffer.data() + size,
                 writer->buffer.data() + size + 32,
@@ -535,6 +598,16 @@ public:
             if (ec == std::errc()) {
                 writer->buffer.resize(ptr - writer->buffer.data());
             }
+#       else
+            const int32_t length = std::trunc(number) == number
+                ? std::snprintf(const_cast<char*>(
+                    writer->buffer.data() + size), 32, "%.0f", number)
+                : std::snprintf(const_cast<char*>(
+                    writer->buffer.data() + size), 32, "%.8e", number);
+            if (length > 0) {
+                writer->buffer.resize(size + length);
+            }
+#       endif
             else {
                 writer->isPrevKey = true; // skip tab()
                 value(nullptr);
@@ -603,7 +676,7 @@ public:
             return *this;
         }
         template <typename bool_t,
-            std::enable_if_t<std::is_same_v<bool_t, bool>, int> = 0>
+            typename = typename std::enable_if<std::is_same<bool_t, bool>::value>::type>
         array_t& value(const bool_t boolean) {
             writer->tab(false);
             if (boolean) {
@@ -646,6 +719,7 @@ public:
             writer->tab(false);
             const auto size = writer->buffer.size();
             writer->buffer.resize(size + 32);
+#       if defined(CJWD_CPP17_OR_GREATER)
             const auto [ptr, ec] = std::to_chars(
                 writer->buffer.data() + size,
                 writer->buffer.data() + size + 32,
@@ -654,6 +728,16 @@ public:
             if (ec == std::errc()) {
                 writer->buffer.resize(ptr - writer->buffer.data());
             }
+#       else
+            const int32_t length = std::trunc(number) == number
+                ? std::snprintf(const_cast<char*>(
+                    writer->buffer.data() + size), 32, "%.0f", number)
+                : std::snprintf(const_cast<char*>(
+                    writer->buffer.data() + size), 32, "%.8e", number);
+            if (length > 0) {
+                writer->buffer.resize(size + length);
+            }
+#       endif
             else {
                 writer->isPrevKey = true; // skip tab()
                 value(nullptr);

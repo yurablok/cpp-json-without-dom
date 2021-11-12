@@ -71,7 +71,7 @@ void test() {
         //   // comment first \n line
         //   // comment second line
         //   "special": null,
-        //   "number": -123.456e-7
+        //   "number": -1.23456e-05
         // }
         writer.object([](json_writer::object_t json) {
             json
@@ -260,6 +260,34 @@ void test() {
                 });
                 return true;
             });
+            return true;
+        });
+        assert(reader.error == nullptr);
+    }
+    {
+        // {
+        //   "number": 123,
+        //   "object": {
+        //   }
+        // }
+        writer.object([](json_writer::object_t json) {
+            json
+            .key("number").value(123)
+            .key("object").object(nullptr);
+        });
+        reader = writer.buffer;
+        reader.parse([](json_reader::key_t key, const json_reader::value_t& value) {
+            switch_str(key, "number", "object") {
+            case_str("number"):
+                assert(value.as_number() == 123);
+                break;
+            case_str("object"):
+                assert(value.is_object());
+                break;
+            default:
+                assert(false);
+                break;
+            }
             return true;
         });
         assert(reader.error == nullptr);

@@ -148,6 +148,21 @@ void test() {
                 });
             });
         });
+        assert(writer.buffer ==
+            R"({)""\n"
+            R"(  "aa": "bb",)""\n"
+            R"(  "cc": {)""\n"
+            R"(    "dd": {)""\n"
+            R"(      "skip": {)""\n"
+            R"(        "null": null )""\n"
+            R"(      } )""\n"
+            R"(    },)""\n"
+            R"(    "ee": {)""\n"
+            R"(      "ff": "gg" )""\n"
+            R"(    } )""\n"
+            R"(  } )""\n"
+            R"(})"
+        );
         reader = writer.buffer;
         reader.parse([&reader](json_reader::key_t key, const json_reader::value_t& value) {
             switch_str(key, "aa", "cc") {
@@ -202,21 +217,33 @@ void test() {
                 .key("aa").array([](json_writer::array_t json) {
                     json
                     .value(12)
-                    .comment("comment")
+                    .comment(" comment")
                     .object([](json_writer::object_t json) {
                         json
                         .key("bb").value("cc");
-                    })
+                    }, json_writer::flags::single_line)
                     .object([](json_writer::object_t json) {
                         json
                         .key("dd").array([](json_writer::array_t json) {
                             json
                             .value(34);
                         });
-                    });
+                    }, json_writer::flags::single_line);
                 });
             });
         });
+        assert(writer.buffer ==
+            R"([)""\n"
+            R"(  {)""\n"
+            R"(    "aa": [)""\n"
+            R"(      12,)""\n"
+            R"(      // comment)""\n"
+            R"(      { "bb": "cc" },)""\n"
+            R"(      { "dd": [ 34  ] } )""\n"
+            R"(    ] )""\n"
+            R"(  } )""\n"
+            R"(])"
+        );
         reader = writer.buffer;
         reader.parse([&reader](json_reader::key_t key, const json_reader::value_t& value) {
             assert(key.empty());
@@ -290,6 +317,57 @@ void test() {
             }
             return true;
         });
+        assert(reader.error == nullptr);
+    }
+    {
+        // { "number": 123, "object": {} }
+        writer.object([](json_writer::object_t json) {
+            json
+            .key("number").value(123)
+            .key("object").object(nullptr);
+        }, json_writer::flags::single_line);
+
+        assert(writer.buffer == R"({ "number": 123, "object": {}  })");
+        reader = writer.buffer;
+        reader.parse([](json_reader::key_t key, const json_reader::value_t& value) {
+            switch_str(key, "number", "object") {
+            case_str("number"):
+                assert(value.as_number() == 123);
+                break;
+            case_str("object"):
+                assert(value.is_object());
+                break;
+            default:
+                assert(false);
+                break;
+            }
+            return true;
+        });
+        assert(reader.error == nullptr);
+    }
+    {
+        // {
+        //   "object": { "1": 2, "3": "4" },
+        //   "array": [ 1, 2, 3 ]
+        // }
+        writer.object([](json_writer::object_t json) {
+            json
+            .key("object").object([](json_writer::object_t json) {
+                json.key("1").value(2).key("3").value("4");
+            }, json_writer::flags::single_line)
+            .key("array").array([](json_writer::array_t json) {
+                json.value(1).value(2).comment("impossible").value(3);
+            }, json_writer::flags::single_line);
+        });
+
+        assert(writer.buffer ==
+            R"({)""\n"
+            R"(  "object": { "1": 2, "3": "4" },)""\n"
+            R"(  "array": [ 1, 2, 3 ] )""\n"
+            R"(})"
+        );
+        reader = writer.buffer;
+        reader.parse(nullptr);
         assert(reader.error == nullptr);
     }
 }

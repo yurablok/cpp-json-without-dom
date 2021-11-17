@@ -6,6 +6,7 @@
 // License: BSL-1.0
 // https://github.com/yurablok/cpp-json-without-dom
 // History:
+// v0.3 2021-Nov-17     Single-line branches.
 // v0.2 2021-Nov-15     C++11 support by using of third-party libs.
 // v0.1 2021-Aug-23     First release.
 
@@ -455,16 +456,21 @@ struct json_writer {
 private:
     uint32_t lastComma = 0;
     uint8_t level = 0;
+    bool singleLine = false;
     bool isPrevKey = false;
     void tab(const bool removeComma) {
         if (isPrevKey) {
             isPrevKey = false;
             return;
         }
-        if (removeComma && lastComma) {
+        if (removeComma && lastComma > 0) {
             buffer[lastComma] = ' ';
         }
         lastComma = 0;
+        if (singleLine) {
+            buffer.push_back(' ');
+            return;
+        }
         buffer.push_back('\n');
         for (uint8_t i = 0; i < level * tabSize; ++i) {
             buffer.push_back(' ');
@@ -509,37 +515,63 @@ private:
         }
     }
 public:
+    enum class flags : uint8_t {
+        none        = 0x00,
+        single_line = 0x01,
+    };
     uint8_t tabSize = 2;
     std::string buffer;
 
     struct object_t;
     struct array_t;
     struct value_t {
-        object_t object(std::function<void(object_t json)> handler) {
+        object_t object(std::function<void(object_t json)> handler,
+                const flags flags_ = flags::none) {
             writer->tab(false);
             writer->buffer.push_back('{');
             
             if (handler) {
                 ++writer->level;
-                handler({ writer });
-                --writer->level;
+                if (flags_ == flags::single_line && !writer->singleLine) {
+                    writer->singleLine = true;
+                    handler({ writer });
+                    --writer->level;
+                    writer->tab(true);
+                    writer->buffer.pop_back();
+                    writer->singleLine = false;
+                }
+                else {
+                    handler({ writer });
+                    --writer->level;
+                    writer->tab(true);
+                }
             }
-            writer->tab(true);
             writer->buffer.push_back('}');
             writer->lastComma = static_cast<uint32_t>(writer->buffer.size());
             writer->buffer.push_back(',');
             return { writer };
         }
-        object_t array(std::function<void(array_t json)> handler) {
+        object_t array(std::function<void(array_t json)> handler,
+                const flags flags_ = flags::none) {
             writer->tab(false);
             writer->buffer.push_back('[');
 
             if (handler) {
                 ++writer->level;
-                handler({ writer });
-                --writer->level;
+                if (flags_ == flags::single_line && !writer->singleLine) {
+                    writer->singleLine = true;
+                    handler({ writer });
+                    --writer->level;
+                    writer->tab(true);
+                    writer->buffer.pop_back();
+                    writer->singleLine = false;
+                }
+                else {
+                    handler({ writer });
+                    --writer->level;
+                    writer->tab(true);
+                }
             }
-            writer->tab(true);
             writer->buffer.push_back(']');
             writer->lastComma = static_cast<uint32_t>(writer->buffer.size());
             writer->buffer.push_back(',');
@@ -633,6 +665,9 @@ public:
             return { writer };
         }
         object_t comment(const std::string_view line) {
+            if (writer->singleLine) {
+                return { writer };
+            }
             writer->tab(false);
             writer->buffer.push_back('/');
             writer->buffer.push_back('/');
@@ -645,31 +680,53 @@ public:
         json_writer* writer = nullptr;
     };
     struct array_t {
-        array_t& object(std::function<void(object_t json)> handler) {
+        array_t& object(std::function<void(object_t json)> handler,
+                const flags flags_ = flags::none) {
             writer->tab(false);
             writer->buffer.push_back('{');
 
             if (handler) {
                 ++writer->level;
-                handler({ writer });
-                --writer->level;
+                if (flags_ == flags::single_line && !writer->singleLine) {
+                    writer->singleLine = true;
+                    handler({ writer });
+                    --writer->level;
+                    writer->tab(true);
+                    writer->buffer.pop_back();
+                    writer->singleLine = false;
+                }
+                else {
+                    handler({ writer });
+                    --writer->level;
+                    writer->tab(true);
+                }
             }
-            writer->tab(true);
             writer->buffer.push_back('}');
             writer->lastComma = static_cast<uint32_t>(writer->buffer.size());
             writer->buffer.push_back(',');
             return *this;
         }
-        array_t& array(std::function<void(array_t json)> handler) {
+        array_t& array(std::function<void(array_t json)> handler,
+                const flags flags_ = flags::none) {
             writer->tab(false);
             writer->buffer.push_back('[');
 
             if (handler) {
                 ++writer->level;
-                handler(*this);
-                --writer->level;
+                if (flags_ == flags::single_line && !writer->singleLine) {
+                    writer->singleLine = true;
+                    handler(*this);
+                    --writer->level;
+                    writer->tab(true);
+                    writer->buffer.pop_back();
+                    writer->singleLine = false;
+                }
+                else {
+                    handler(*this);
+                    --writer->level;
+                    writer->tab(true);
+                }
             }
-            writer->tab(true);
             writer->buffer.push_back(']');
             writer->lastComma = static_cast<uint32_t>(writer->buffer.size());
             writer->buffer.push_back(',');
@@ -747,6 +804,9 @@ public:
             return *this;
         }
         array_t& comment(const std::string_view line) {
+            if (writer->singleLine) {
+                return *this;
+            }
             writer->tab(false);
             writer->buffer.push_back('/');
             writer->buffer.push_back('/');
@@ -759,10 +819,17 @@ public:
         json_writer* writer = nullptr;
     };
 
-    object_t object(std::function<void(object_t json)> handler) {
+    object_t object(std::function<void(object_t json)> handler,
+            const flags flags_ = flags::none) {
         buffer.clear();
         buffer.push_back('{');
 
+        if (flags_ == flags::single_line) {
+            singleLine = true;
+        }
+        else {
+            singleLine = false;
+        }
         if (handler) {
             ++level;
             handler({ this });
@@ -772,10 +839,17 @@ public:
         buffer.push_back('}');
         return { this };
     }
-    array_t array(std::function<void(array_t json)> handler) {
+    array_t array(std::function<void(array_t json)> handler,
+            const flags flags_ = flags::none) {
         buffer.clear();
         buffer.push_back('[');
 
+        if (flags_ == flags::single_line) {
+            singleLine = true;
+        }
+        else {
+            singleLine = false;
+        }
         if (handler) {
             ++level;
             handler({ this });

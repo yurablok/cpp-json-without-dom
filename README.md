@@ -14,10 +14,11 @@ a simplicity of the format.
 ### Benefits and features:
 
 - fast (see comparison)
-- minimal API, single header ~780 LOC
+- minimal API, single header ~850 LOC
 - one-pass parser without intermediate DOM representation 
 - zero-copy parse if no escape (`\`)
-- single line comments (`// ...`)
+- single-line comments (`// ...`)
+- single-line branches (`{ [ { } ] }`)
 - `*` C++11 support by using of third-party libs
   ([string_view](https://github.com/martinmoene/string-view-lite)
   and [variant](https://github.com/mpark/variant))

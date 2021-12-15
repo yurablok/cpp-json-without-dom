@@ -63,13 +63,13 @@ json.parse([&json](json_parse::key_t key, const json_parse::value_t& value) {
     switch_str(key, "number", "array") {
     case_str("number"):
         if (!value.is_number()) {
-            return false;
+            return;
         }
         assert(value.as_number() == 123);
         break;
     case_str("array"): {
         if (!value.is_array()) {
-            return false;
+            return;
         }
         uint8_t index = 0;
         json.parse([&index](json_parse::key_t key, const json_parse::value_t& value) {
@@ -82,18 +82,15 @@ json.parse([&json](json_parse::key_t key, const json_parse::value_t& value) {
                 break;
             case 2:
                 assert(value.is_object());
-                return false;
+                break;
             default:
-                return false;
+                break;
             }
-            return true; // true means a processed item, otherwise return false to skip
         });
-        return true; // always return true after calling the parse
     }
     default:
-        return false;
+        break;
     }
-    return true;
 });
 assert(json.error == nullptr);
 ```

@@ -48,7 +48,6 @@ void test() {
         reader = writer.buffer;
         reader.parse([](json_reader::key_t key, const json_reader::value_t& value) {
             assert(false);
-            return true;
         });
         assert(reader.error == nullptr);
     }
@@ -58,7 +57,13 @@ void test() {
         reader = writer.buffer;
         reader.parse([](json_reader::key_t key, const json_reader::value_t& value) {
             assert(false);
-            return true;
+        });
+        assert(reader.error == nullptr);
+    }
+    {
+        reader = R"({ "obj": { "arr": [] } })";
+        reader.parse([&](json_reader::key_t key, const json_reader::value_t& value) {
+            reader.parse(nullptr);
         });
         assert(reader.error == nullptr);
     }
@@ -112,7 +117,6 @@ void test() {
                 assert(false);
                 break;
             }
-            return true;
         });
         assert(reader.error == nullptr);
     }
@@ -175,27 +179,24 @@ void test() {
                     switch_str(key, "dd", "ee") {
                     case_str("dd") :
                         assert(value.is_object());
-                        return false; // skip
+                        break; // skip
                     case_str("ee") :
                         assert(value.is_object());
                         reader.parse([](json_reader::key_t key, const json_reader::value_t& value) {
                             assert(key == "ff");
                             assert(value.as_string() == "gg");
-                            return true;
                         });
                         break;
                     default:
                         assert(false);
                         break;
                     }
-                    return true;
                 });
                 break;
             default:
                 assert(false);
                 break;
             }
-            return true;
         });
         assert(reader.error == nullptr);
     }
@@ -263,7 +264,6 @@ void test() {
                         reader.parse([&reader](json_reader::key_t key, const json_reader::value_t& value) {
                             assert(key == "bb");
                             assert(value.as_string() == "cc");
-                            return true;
                         });
                         break;
                     case 2:
@@ -274,20 +274,15 @@ void test() {
                             reader.parse([&reader](json_reader::key_t key, const json_reader::value_t& value) {
                                 assert(key.empty());
                                 assert(value.as_number() == 34);
-                                return true;
                             });
-                            return true;
                         });
                         break;
                     default:
                         assert(false);
                         break;
                     }
-                    return true;
                 });
-                return true;
             });
-            return true;
         });
         assert(reader.error == nullptr);
     }
@@ -315,7 +310,6 @@ void test() {
                 assert(false);
                 break;
             }
-            return true;
         });
         assert(reader.error == nullptr);
     }
@@ -341,7 +335,6 @@ void test() {
                 assert(false);
                 break;
             }
-            return true;
         });
         assert(reader.error == nullptr);
     }
@@ -847,88 +840,83 @@ void benchmark() {
             json = addressbookJson;
             json.parse([&](json_reader::key_t key, const json_reader::value_t& value) {
                 if (!value.is_object()) {
-                    return false;
+                    return;
                 }
                 json.parse([&](json_reader::key_t key, const json_reader::value_t& value) {
                     switch_str(key, "name", "id", "email", "phones", "employment") {
                     case_str("name"):
                         if (!value.is_string()) {
-                            return false;
+                            return;
                         }
                         number = value.as_string().size();
                         break;
                     case_str("id"):
                         if (!value.is_number()) {
-                            return false;
+                            return;
                         }
                         number = value.as_number();
                         break;
                     case_str("email"):
                         if (!value.is_string()) {
-                            return false;
+                            return;
                         }
                         number = value.as_string().size();
                         break;
                     case_str("phones"):
                         if (!value.is_array()) {
-                            return false;
+                            return;
                         }
                         json.parse([&](json_reader::key_t key, const json_reader::value_t& value) {
                             if (!value.is_object()) {
-                                return false;
+                                return;
                             }
                             json.parse([&](json_reader::key_t key, const json_reader::value_t& value) {
                                 switch_str(key, "number", "type") {
                                 case_str("number"):
                                     if (!value.is_string()) {
-                                        return false;
+                                        return;
                                     }
                                     number = value.as_string().size();
                                     break;
                                 case_str("type"):
                                     if (!value.is_string()) {
-                                        return false;
+                                        return;
                                     }
                                     number = value.as_string().size();
                                     break;
                                 default:
-                                    return false;
+                                    break;
                                 }
-                                return true;
                             });
-                            return true;
                         });
                         break;
                     case_str("employment"):
                         if (!value.is_object()) {
-                            return false;
+                            return;
                         }
                         json.parse([&](json_reader::key_t key, const json_reader::value_t& value) {
                             switch_str(key, "variant", "text") {
                             case_str("variant"):
                                 if (!value.is_string()) {
-                                    return false;
+                                    return;
                                 }
                                 number = value.as_string().size();
                                 break;
                             case_str("text"):
                                 if (!value.is_string()) {
-                                    return false;
+                                    return;
                                 }
                                 number = value.as_string().size();
                                 break;
                             default:
-                                return false;
+                                break;
                             }
-                            return true;
                         });
                         break;
                     default:
-                        return false;
+                        break;
                     }
-                    return true;
                 });
-                return true;
             });
         }
         end_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
@@ -1001,7 +989,7 @@ void benchmark() {
         << "write " << std::setw(5) << time[3][1] / 100 << " mcs 100 %" << std::endl;
 }
 
-int main() {
+int32_t main() {
     test();
     std::cout << "success" << std::endl;
     std::cin.get();

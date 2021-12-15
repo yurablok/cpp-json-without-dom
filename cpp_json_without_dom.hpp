@@ -6,6 +6,7 @@
 // License: BSL-1.0
 // https://github.com/yurablok/cpp-json-without-dom
 // History:
+// v0.4 2021-Dec-15     Return void in handlers for json_reader.
 // v0.3 2021-Nov-17     Single-line branches.
 // v0.2 2021-Nov-15     C++11 support by using of third-party libs.
 // v0.1 2021-Aug-23     First release.
@@ -125,7 +126,7 @@ struct json_reader {
 
     // handler -> true  if processed
     // handler -> false if skipped
-    void parse(std::function<bool(key_t key, const value_t& value)> handler) {
+    void parse(std::function<void(key_t key, const value_t& value)> handler) {
         if (error != nullptr) {
             return;
         }
@@ -174,9 +175,13 @@ struct json_reader {
                     step = steps::comment;
                     beginStr = begin;
                     break;
-                case '{':
+                case '{': {
                     value.emplace<object_idx>();
-                    if (!handler || !handler(key, value)) {
+                    auto beginBefore = begin;
+                    if (handler) {
+                        handler(key, value);
+                    }
+                    if (begin == beginBefore) {
                         parse(nullptr);
                     }
                     if (error != nullptr) {
@@ -184,6 +189,7 @@ struct json_reader {
                     }
                     step = steps::next;
                     break;
+                }
                 case '}':
                     return;
                 case '"':
@@ -221,9 +227,13 @@ struct json_reader {
                     step = steps::comment;
                     beginStr = begin;
                     break;
-                case '{':
+                case '{': {
                     value.emplace<object_idx>();
-                    if (!handler || !handler(key, value)) {
+                    auto beginBefore = begin;
+                    if (handler) {
+                        handler(key, value);
+                    }
+                    if (begin == beginBefore) {
                         parse(nullptr);
                     }
                     if (error != nullptr) {
@@ -231,11 +241,16 @@ struct json_reader {
                     }
                     step = steps::next;
                     break;
+                }
                 case '}':
                     return;
-                case '[':
+                case '[': {
                     value.emplace<array_idx>();
-                    if (!handler || !handler(key, value)) {
+                    auto beginBefore = begin;
+                    if (handler) {
+                        handler(key, value);
+                    }
+                    if (begin == beginBefore) {
                         parse(nullptr);
                     }
                     if (error != nullptr) {
@@ -243,6 +258,7 @@ struct json_reader {
                     }
                     step = steps::next;
                     break;
+                }
                 case ']':
                     return;
                 case '"':

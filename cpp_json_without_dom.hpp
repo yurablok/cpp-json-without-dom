@@ -6,6 +6,7 @@
 // License: BSL-1.0
 // https://github.com/yurablok/cpp-json-without-dom
 // History:
+// v0.5 2021-Dec-24     Autoconvert `nan` and `inf` to `null` in json_writer.
 // v0.4 2021-Dec-15     Return void in handlers for json_reader.
 // v0.3 2021-Nov-17     Single-line branches.
 // v0.2 2021-Nov-15     C++11 support by using of third-party libs.
@@ -634,6 +635,9 @@ public:
             return { writer };
         }
         object_t value(const double number) {
+            if (std::isnan(number) || std::isinf(number)) {
+                return value(nullptr);
+            }
             writer->tab(false);
             const auto size = writer->buffer.size();
             writer->buffer.resize(size + 32);
@@ -789,6 +793,9 @@ public:
             return *this;
         }
         array_t& value(const double number) {
+            if (std::isnan(number) || std::isinf(number)) {
+                return value(nullptr);
+            }
             writer->tab(false);
             const auto size = writer->buffer.size();
             writer->buffer.resize(size + 32);

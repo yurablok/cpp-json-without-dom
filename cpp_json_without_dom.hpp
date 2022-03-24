@@ -6,6 +6,7 @@
 // License: BSL-1.0
 // https://github.com/yurablok/cpp-json-without-dom
 // History:
+// v0.6 2022-Mar-24     Proper handling of `double` in `charconv` support in GCC.
 // v0.5 2021-Dec-24     Autoconvert `nan` and `inf` to `null` in json_writer.
 // v0.4 2021-Dec-15     Return void in handlers for json_reader.
 // v0.3 2021-Nov-17     Single-line branches.
@@ -16,16 +17,24 @@
 #include <string>
 #include <functional>
 #include <type_traits>
+#include <cmath>
 
-#if defined(_MSVC_LANG)
-#   if _MSVC_LANG >= 201703L
-#       define CJWD_CPP17_OR_GREATER
-#   endif
+#if defined(_MSVC_LANG) && _MSVC_LANG >= 201703L
+#   define CJWD_CPP_LIB_CHARCONV
+#   define CJWD_CPP_LIB_CHARCONV_FLOAT
 #elif __cplusplus >= 201703L
-#   define CJWD_CPP17_OR_GREATER
+#   if defined(__GNUG__)
+#       define CJWD_CPP_LIB_CHARCONV
+#       if defined(__cpp_lib_to_chars)
+#           define CJWD_CPP_LIB_CHARCONV_FLOAT
+#       endif
+#   else
+#       define CJWD_CPP_LIB_CHARCONV
+#       define CJWD_CPP_LIB_CHARCONV_FLOAT
+#   endif
 #endif
 
-#if defined(CJWD_CPP17_OR_GREATER)
+#if defined(CJWD_CPP_LIB_CHARCONV)
 #   include <string_view>
 #   include <variant>
 #   include <charconv>
@@ -34,9 +43,10 @@
 #   include "variant.hpp" // https://github.com/mpark/variant
 namespace std {
     using string_view = nonstd::string_view;
-    template <typename... args_t>
 
+    template <typename... args_t>
     using variant = mpark::variant<args_t...>;
+    
     template <std::size_t I, typename... args_t>
     inline mpark::variant_alternative_t<I, variant<args_t...>>& get(variant<args_t...>& v) {
         return mpark::get<I>(v);
@@ -321,7 +331,7 @@ struct json_reader {
                     break;
                 default:
                     double v = 0.0;
-#               if defined(CJWD_CPP17_OR_GREATER)
+#               if defined(CJWD_CPP_LIB_CHARCONV_FLOAT)
                     auto [ptr, ec] = std::from_chars(beginStr, begin, v);
                     if (ptr != begin || ec != std::errc()) {
                         error = ptr;
@@ -641,7 +651,7 @@ public:
             writer->tab(false);
             const auto size = writer->buffer.size();
             writer->buffer.resize(size + 32);
-#       if defined(CJWD_CPP17_OR_GREATER)
+#       if defined(CJWD_CPP_LIB_CHARCONV_FLOAT)
             const auto [ptr, ec] = std::to_chars(
                 writer->buffer.data() + size,
                 writer->buffer.data() + size + 32,

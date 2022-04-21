@@ -4,7 +4,9 @@
 #include <chrono>
 #include <array>
 #include <vector>
+
 #include "switch-str/switch_str.hpp"
+#include "cpp-adaptive-benchmark/benchmark.hpp"
 
 #include "../cpp_json_without_dom.hpp"
 
@@ -46,6 +48,7 @@ void test() {
         // {}
         writer.object(nullptr);
         reader = writer.buffer;
+        assert(reader.is_object());
         reader.parse([](json_reader::key_t key, const json_reader::value_t& value) {
             assert(false);
         });
@@ -55,15 +58,17 @@ void test() {
         // []
         writer.array(nullptr);
         reader = writer.buffer;
-        reader.parse([](json_reader::key_t key, const json_reader::value_t& value) {
+        assert(reader.is_array());
+        reader.parse([](uint32_t index, const json_reader::value_t& value) {
             assert(false);
         });
         assert(reader.error == nullptr);
     }
     {
         reader = R"({ "obj": { "arr": [] } })";
+        assert(reader.is_object());
         reader.parse([&](json_reader::key_t key, const json_reader::value_t& value) {
-            reader.parse(nullptr);
+            reader.parse(std::function<void(json_reader::key_t, const json_reader::value_t&)>());
         });
         assert(reader.error == nullptr);
     }
@@ -90,6 +95,7 @@ void test() {
             .key("number").value(-123.456e-7);
         });
         reader = writer.buffer;
+        assert(reader.is_object());
         reader.parse([](json_reader::key_t key, const json_reader::value_t& value) {
             switch_str(key, "first", "es\"ca\"pe", "unicode", "boolean", "special", "number") {
             case_str("first"):
@@ -168,6 +174,7 @@ void test() {
             R"(})"
         );
         reader = writer.buffer;
+        assert(reader.is_object());
         reader.parse([&reader](json_reader::key_t key, const json_reader::value_t& value) {
             switch_str(key, "aa", "cc") {
             case_str("aa"):
@@ -246,16 +253,15 @@ void test() {
             R"(])"
         );
         reader = writer.buffer;
-        reader.parse([&reader](json_reader::key_t key, const json_reader::value_t& value) {
-            assert(key.empty());
+        assert(reader.is_array());
+        reader.parse([&reader](uint32_t index, const json_reader::value_t& value) {
+            assert(index == 0);
             assert(value.is_object());
             reader.parse([&reader](json_reader::key_t key, const json_reader::value_t& value) {
                 assert(key == "aa");
                 assert(value.is_array());
-                uint8_t index = 0;
-                reader.parse([&reader, &index](json_reader::key_t key, const json_reader::value_t& value) {
-                    assert(key.empty());
-                    switch (index++) {
+                reader.parse([&reader](uint32_t index, const json_reader::value_t& value) {
+                    switch (index) {
                     case 0:
                         assert(value.as_number() == 12);
                         break;
@@ -271,8 +277,8 @@ void test() {
                         reader.parse([&reader](json_reader::key_t key, const json_reader::value_t& value) {
                             assert(key == "dd");
                             assert(value.is_array());
-                            reader.parse([&reader](json_reader::key_t key, const json_reader::value_t& value) {
-                                assert(key.empty());
+                            reader.parse([&reader](uint32_t index, const json_reader::value_t& value) {
+                                assert(index == 0);
                                 assert(value.as_number() == 34);
                             });
                         });
@@ -298,6 +304,7 @@ void test() {
             .key("object").object(nullptr);
         });
         reader = writer.buffer;
+        assert(reader.is_object());
         reader.parse([](json_reader::key_t key, const json_reader::value_t& value) {
             switch_str(key, "number", "object") {
             case_str("number"):
@@ -323,6 +330,7 @@ void test() {
 
         assert(writer.buffer == R"({ "number": 123, "object": {}  })");
         reader = writer.buffer;
+        assert(reader.is_object());
         reader.parse([](json_reader::key_t key, const json_reader::value_t& value) {
             switch_str(key, "number", "object") {
             case_str("number"):
@@ -360,9 +368,11 @@ void test() {
             R"(})"
         );
         reader = writer.buffer;
-        reader.parse(nullptr);
+        assert(reader.is_object());
+        reader.parse(std::function<void(json_reader::key_t, const json_reader::value_t&)>());
         assert(reader.error == nullptr);
     }
+    std::cout << "All the tests passed successfully." << std::endl;
 }
 
 void benchmark() {
@@ -435,18 +445,9 @@ void benchmark() {
         }
     };
 
+    Benchmark bench;
+    bench.setColumnsNumber(2);
     volatile int32_t number = 0;
-    constexpr uint32_t repsi = 100;
-    constexpr uint32_t repso = 100000;
-    int64_t begin_ns;
-    int64_t end_ns;
-    std::array<std::array<int64_t, 2>, 4> time = { {
-        {{ INT64_MAX, INT64_MAX }},
-        {{ INT64_MAX, INT64_MAX }},
-        {{ INT64_MAX, INT64_MAX }},
-        {{ INT64_MAX, INT64_MAX }}
-    }};
-    std::cout << "step 0/8" << std::endl;
 
     // =========================================================================
     //      _ ____   ___  _   _    __              __  __           _                    ____            
@@ -455,100 +456,82 @@ void benchmark() {
     // | |_| |___) | |_| | |\  | |  _| (_) | |    | |  | | (_) | (_| |  __/ |  | | | | | |__|_   _|_   _|
     //  \___/|____/ \___/|_| \_| |_|  \___/|_|    |_|  |_|\___/ \__,_|\___|_|  |_| |_|  \____||_|   |_|  
 
-    for (uint32_t i = 0; i < repso; ++i) {
-        begin_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
-            std::chrono::steady_clock::now().time_since_epoch()).count();
-        for (uint32_t i = 0; i < repsi; ++i) {
-            nlohmann::json json = nlohmann::json::parse(addressbookJson.begin(), addressbookJson.end());
-            if (!json.is_array()) {
+    bench.add("nlohmann_json", 0, [&](uint32_t) {
+        nlohmann::json json = nlohmann::json::parse(addressbookJson.begin(), addressbookJson.end());
+        if (!json.is_array()) {
+            return;
+        }
+        for (const auto& it : json) {
+            if (!it.is_object()) {
                 continue;
             }
-            for (const auto& it : json) {
-                if (!it.is_object()) {
-                    continue;
-                }
-                const auto itName = it.find("name");
-                if (itName != it.end() && itName->is_string()) {
-                    number = itName->get<std::string_view>().size();
-                }
-                const auto itId = it.find("id");
-                if (itId != it.end() && itId->is_number()) {
-                    number = itId->get<double>();
-                }
-                const auto itEmail = it.find("email");
-                if (itEmail != it.end() && itEmail->is_string()) {
-                    number = itEmail->get<std::string_view>().size();
-                }
-                const auto itPhones = it.find("phones");
-                if (itPhones != it.end() && itPhones->is_array()) {
-                    for (const auto& itPhone : itPhones.value()) {
-                        if (!itPhone.is_object()) {
-                            continue;
-                        }
-                        const auto itNumber = itPhone.find("number");
-                        if (itNumber != itPhone.end() && itNumber->is_string()) {
-                            number = itNumber->get<std::string_view>().size();
-                        }
-                        const auto itType = itPhone.find("type");
-                        if (itType != itPhone.end() && itType->is_string()) {
-                            number = itType->get<std::string_view>().size();
-                        }
+            const auto itName = it.find("name");
+            if (itName != it.end() && itName->is_string()) {
+                number = itName->get<std::string_view>().size();
+            }
+            const auto itId = it.find("id");
+            if (itId != it.end() && itId->is_number()) {
+                number = itId->get<double>();
+            }
+            const auto itEmail = it.find("email");
+            if (itEmail != it.end() && itEmail->is_string()) {
+                number = itEmail->get<std::string_view>().size();
+            }
+            const auto itPhones = it.find("phones");
+            if (itPhones != it.end() && itPhones->is_array()) {
+                for (const auto& itPhone : itPhones.value()) {
+                    if (!itPhone.is_object()) {
+                        continue;
+                    }
+                    const auto itNumber = itPhone.find("number");
+                    if (itNumber != itPhone.end() && itNumber->is_string()) {
+                        number = itNumber->get<std::string_view>().size();
+                    }
+                    const auto itType = itPhone.find("type");
+                    if (itType != itPhone.end() && itType->is_string()) {
+                        number = itType->get<std::string_view>().size();
                     }
                 }
-                const auto itEmployment = it.find("employment");
-                if (itEmployment != it.end() && itEmployment->is_object()) {
-                    const auto itVariant = itEmployment->find("variant");
-                    if (itVariant != itEmployment->end() && itVariant->is_string()) {
-                        number = itVariant->get<std::string_view>().size();
-                    }
-                    const auto itText = itEmployment->find("text");
-                    if (itText != itEmployment->end() && itText->is_string()) {
-                        number = itText->get<std::string_view>().size();
-                    }
+            }
+            const auto itEmployment = it.find("employment");
+            if (itEmployment != it.end() && itEmployment->is_object()) {
+                const auto itVariant = itEmployment->find("variant");
+                if (itVariant != itEmployment->end() && itVariant->is_string()) {
+                    number = itVariant->get<std::string_view>().size();
+                }
+                const auto itText = itEmployment->find("text");
+                if (itText != itEmployment->end() && itText->is_string()) {
+                    number = itText->get<std::string_view>().size();
                 }
             }
         }
-        end_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
-            std::chrono::steady_clock::now().time_since_epoch()).count();
-        time[0][0] = std::min(time[0][0], end_ns - begin_ns);
-    }
-    std::cout << "step 1/8" << std::endl;
+    });
 
     // =========================================================================
 
-    {
-    nlohmann::json json;
-    for (uint32_t i = 0; i < repso; ++i) {
-        begin_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
-            std::chrono::steady_clock::now().time_since_epoch()).count();
-        for (uint32_t i = 0; i < repsi; ++i) {
-            json.clear();
-            for (const auto& person : addressbookData) {
-                nlohmann::json personObj;
-                personObj["name"] = person.name;
-                personObj["id"] = person.id;
-                personObj["email"] = person.email;
-                auto& phones = personObj["phones"];
-                for (const auto& phone : person.phones) {
-                    nlohmann::json phoneObj;
-                    phoneObj["number"] = phone.number;
-                    phoneObj["type"] = phone.type;
-                    phones.push_back(std::move(phoneObj));
-                }
-                personObj["employment"]["variant"] = person.employment.variant;
-                if (!person.employment.text.empty()) {
-                    personObj["employment"]["text"] = person.employment.text;
-                }
-                json.push_back(std::move(personObj));
+    nlohmann::json json_nl;
+    bench.add("nlohmann_json", 1, [&](uint32_t) {
+        json_nl.clear();
+        for (const auto& person : addressbookData) {
+            nlohmann::json personObj;
+            personObj["name"] = person.name;
+            personObj["id"] = person.id;
+            personObj["email"] = person.email;
+            auto& phones = personObj["phones"];
+            for (const auto& phone : person.phones) {
+                nlohmann::json phoneObj;
+                phoneObj["number"] = phone.number;
+                phoneObj["type"] = phone.type;
+                phones.push_back(std::move(phoneObj));
             }
-            number = json.dump(2).size();
+            personObj["employment"]["variant"] = person.employment.variant;
+            if (!person.employment.text.empty()) {
+                personObj["employment"]["text"] = person.employment.text;
+            }
+            json_nl.push_back(std::move(personObj));
         }
-        end_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
-            std::chrono::steady_clock::now().time_since_epoch()).count();
-        time[0][1] = std::min(time[0][1], end_ns - begin_ns);
-    }
-    }
-    std::cout << "step 2/8" << std::endl;
+        number = json_nl.dump(2).size();
+    });
 
     // =========================================================================
     //  ____             _     _     _ ____   ___  _   _ 
@@ -558,117 +541,99 @@ void benchmark() {
     // |_| \_\__,_| .__/|_|\__,_|\___/|____/ \___/|_| \_|
     //            |_|                                    
 
-    for (uint32_t i = 0; i < repso; ++i) {
-        begin_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
-            std::chrono::steady_clock::now().time_since_epoch()).count();
-        for (uint32_t i = 0; i < repsi; ++i) {
-            rapidjson::Document json;
-            json.Parse(addressbookJson.data(), addressbookJson.size());
-            if (!json.IsArray()) {
+    bench.add("rapidjson", 0, [&](uint32_t) {
+        rapidjson::Document json;
+        json.Parse(addressbookJson.data(), addressbookJson.size());
+        if (!json.IsArray()) {
+            return;
+        }
+        for (const auto& it : json.GetArray()) {
+            if (!it.IsObject()) {
                 continue;
             }
-            for (const auto& it : json.GetArray()) {
-                if (!it.IsObject()) {
-                    continue;
-                }
-                const auto itName = it.FindMember("name");
-                if (itName != it.MemberEnd() && itName->value.IsString()) {
-                    number = itName->value.GetStringLength();
-                }
-                const auto itId = it.FindMember("id");
-                if (itId != it.MemberEnd() && itId->value.IsNumber()) {
-                    number = itId->value.GetDouble();
-                }
-                const auto itEmail = it.FindMember("email");
-                if (itEmail != it.MemberEnd() && itEmail->value.IsString()) {
-                    number = itEmail->value.GetStringLength();
-                }
-                const auto itPhones = it.FindMember("phones");
-                if (itPhones != it.MemberEnd() && itPhones->value.IsArray()) {
-                    for (const auto& itPhone : itPhones->value.GetArray()) {
-                        if (!itPhone.IsObject()) {
-                            continue;
-                        }
-                        const auto itNumber = itPhone.FindMember("number");
-                        if (itNumber != itPhone.MemberEnd() && itNumber->value.IsString()) {
-                            number = itNumber->value.GetStringLength();
-                        }
-                        const auto itType = itPhone.FindMember("type");
-                        if (itType != itPhone.MemberEnd() && itType->value.IsString()) {
-                            number = itType->value.GetStringLength();
-                        }
+            const auto itName = it.FindMember("name");
+            if (itName != it.MemberEnd() && itName->value.IsString()) {
+                number = itName->value.GetStringLength();
+            }
+            const auto itId = it.FindMember("id");
+            if (itId != it.MemberEnd() && itId->value.IsNumber()) {
+                number = itId->value.GetDouble();
+            }
+            const auto itEmail = it.FindMember("email");
+            if (itEmail != it.MemberEnd() && itEmail->value.IsString()) {
+                number = itEmail->value.GetStringLength();
+            }
+            const auto itPhones = it.FindMember("phones");
+            if (itPhones != it.MemberEnd() && itPhones->value.IsArray()) {
+                for (const auto& itPhone : itPhones->value.GetArray()) {
+                    if (!itPhone.IsObject()) {
+                        continue;
+                    }
+                    const auto itNumber = itPhone.FindMember("number");
+                    if (itNumber != itPhone.MemberEnd() && itNumber->value.IsString()) {
+                        number = itNumber->value.GetStringLength();
+                    }
+                    const auto itType = itPhone.FindMember("type");
+                    if (itType != itPhone.MemberEnd() && itType->value.IsString()) {
+                        number = itType->value.GetStringLength();
                     }
                 }
-                const auto itEmployment = it.FindMember("employment");
-                if (itEmployment != it.MemberEnd() && itEmployment->value.IsObject()) {
-                    const auto itVariant = itEmployment->value.FindMember("variant");
-                    if (itVariant != itEmployment->value.MemberEnd() && itVariant->value.IsString()) {
-                        number = itVariant->value.GetStringLength();
-                    }
-                    const auto itText = itEmployment->value.FindMember("text");
-                    if (itText != itEmployment->value.MemberEnd() && itText->value.IsString()) {
-                        number = itText->value.GetStringLength();
-                    }
+            }
+            const auto itEmployment = it.FindMember("employment");
+            if (itEmployment != it.MemberEnd() && itEmployment->value.IsObject()) {
+                const auto itVariant = itEmployment->value.FindMember("variant");
+                if (itVariant != itEmployment->value.MemberEnd() && itVariant->value.IsString()) {
+                    number = itVariant->value.GetStringLength();
+                }
+                const auto itText = itEmployment->value.FindMember("text");
+                if (itText != itEmployment->value.MemberEnd() && itText->value.IsString()) {
+                    number = itText->value.GetStringLength();
                 }
             }
         }
-        end_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
-            std::chrono::steady_clock::now().time_since_epoch()).count();
-        time[1][0] = std::min(time[1][0], end_ns - begin_ns);
-    }
-    std::cout << "step 3/8" << std::endl;
+    });
 
     // =========================================================================
 
-    {
-    rapidjson::StringBuffer buffer;
-    for (uint32_t i = 0; i < repso; ++i) {
-        begin_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
-            std::chrono::steady_clock::now().time_since_epoch()).count();
-        for (uint32_t i = 0; i < repsi; ++i) {
-            buffer.Clear();
-            rapidjson::PrettyWriter<rapidjson::StringBuffer> writer(buffer);
-            writer.SetIndent(' ', 2);
+    rapidjson::StringBuffer buffer_rj;
+    bench.add("rapidjson", 1, [&](uint32_t) {
+        buffer_rj.Clear();
+        rapidjson::PrettyWriter<rapidjson::StringBuffer> writer(buffer_rj);
+        writer.SetIndent(' ', 2);
+        writer.StartArray();
+        for (const auto& person : addressbookData) {
+            writer.StartObject();
+
+            writer.String("name"); writer.String(person.name.data(), person.name.size());
+            writer.String("id"); writer.Double(person.id);
+            writer.String("email"); writer.String(person.email.data(), person.email.size());
+
+            writer.String("phones");
             writer.StartArray();
-            for (const auto& person : addressbookData) {
+            for (const auto& phone : person.phones) {
                 writer.StartObject();
 
-                writer.String("name"); writer.String(person.name.data(), person.name.size());
-                writer.String("id"); writer.Double(person.id);
-                writer.String("email"); writer.String(person.email.data(), person.email.size());
-
-                writer.String("phones");
-                writer.StartArray();
-                for (const auto& phone : person.phones) {
-                    writer.StartObject();
-
-                    writer.String("number"); writer.String(phone.number.data(), phone.number.size());
-                    writer.String("type"); writer.String(phone.type.data(), phone.type.size());
-
-                    writer.EndObject();
-                }
-                writer.EndArray();
-
-                writer.String("employment");
-                writer.StartObject();
-
-                writer.String("variant"); writer.String(person.employment.variant.data(), person.employment.variant.size());
-                if (!person.employment.text.empty()) {
-                    writer.String("text"); writer.String(person.employment.text.data(), person.employment.text.size());
-                }
-                writer.EndObject();
+                writer.String("number"); writer.String(phone.number.data(), phone.number.size());
+                writer.String("type"); writer.String(phone.type.data(), phone.type.size());
 
                 writer.EndObject();
             }
             writer.EndArray();
-            number = buffer.GetSize();
+
+            writer.String("employment");
+            writer.StartObject();
+
+            writer.String("variant"); writer.String(person.employment.variant.data(), person.employment.variant.size());
+            if (!person.employment.text.empty()) {
+                writer.String("text"); writer.String(person.employment.text.data(), person.employment.text.size());
+            }
+            writer.EndObject();
+
+            writer.EndObject();
         }
-        end_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
-            std::chrono::steady_clock::now().time_since_epoch()).count();
-        time[1][1] = std::min(time[1][1], end_ns - begin_ns);
-    }
-    }
-    std::cout << "step 4/8" << std::endl;
+        writer.EndArray();
+        number = buffer_rj.GetSize();
+    });
 
     // =========================================================================
     //            _       _  _                 
@@ -678,87 +643,56 @@ void benchmark() {
     // |_| |_| |_|_|_| |_|_|/ |___/\___/|_| |_|
     //                    |__/                 
 
-    for (uint32_t i = 0; i < repso; ++i) {
-        begin_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
-            std::chrono::steady_clock::now().time_since_epoch()).count();
-        for (uint32_t i = 0; i < repsi; ++i) {
-            minijson::const_buffer_context json(addressbookJson.data(), addressbookJson.size());
-            minijson::parse_array(json, [&](const minijson::value& value) {
-                if (value.type() != minijson::Object) {
-                    minijson::ignore(json);
-                    return;
-                }
-                minijson::parse_object(json, [&](const std::string_view key, const minijson::value& value) {
-                    switch_str(key, "name", "id", "email", "phones", "employment") {
-                    case_str("name"):
-                        if (value.type() != minijson::String) {
-                            minijson::ignore(json);
-                            break;
-                        }
-                        number = std::string_view(value.as_string()).size();
+    bench.add("minijson", 0, [&](uint32_t) {
+        minijson::const_buffer_context json(addressbookJson.data(), addressbookJson.size());
+        minijson::parse_array(json, [&](const minijson::value& value) {
+            if (value.type() != minijson::Object) {
+                minijson::ignore(json);
+                return;
+            }
+            minijson::parse_object(json, [&](const std::string_view key, const minijson::value& value) {
+                switch_str(key, "name", "id", "email", "phones", "employment") {
+                case_str("name"):
+                    if (value.type() != minijson::String) {
+                        minijson::ignore(json);
                         break;
-                    case_str("id"):
-                        if (value.type() != minijson::Number) {
-                            minijson::ignore(json);
-                            break;
-                        }
-                        number = value.as_double();
+                    }
+                    number = std::string_view(value.as_string()).size();
+                    break;
+                case_str("id"):
+                    if (value.type() != minijson::Number) {
+                        minijson::ignore(json);
                         break;
-                    case_str("email"):
-                        if (value.type() != minijson::String) {
-                            minijson::ignore(json);
-                            break;
-                        }
-                        number = std::string_view(value.as_string()).size();
+                    }
+                    number = value.as_double();
+                    break;
+                case_str("email"):
+                    if (value.type() != minijson::String) {
+                        minijson::ignore(json);
                         break;
-                    case_str("phones"):
-                        if (value.type() != minijson::Array) {
-                            minijson::ignore(json);
-                            break;
-                        }
-                        minijson::parse_array(json, [&](const minijson::value& value) {
-                            if (value.type() != minijson::Object) {
-                                minijson::ignore(json);
-                                return;
-                            }
-                            minijson::parse_object(json, [&](const std::string_view key, const minijson::value& value) {
-                                switch_str(key, "number", "type") {
-                                case_str("number"):
-                                    if (value.type() != minijson::String) {
-                                        minijson::ignore(json);
-                                        break;
-                                    }
-                                    number = std::string_view(value.as_string()).size();
-                                    break;
-                                case_str("type"):
-                                    if (value.type() != minijson::String) {
-                                        minijson::ignore(json);
-                                        break;
-                                    }
-                                    number = std::string_view(value.as_string()).size();
-                                    break;
-                                default:
-                                    minijson::ignore(json);
-                                    break;
-                                }
-                            });
-                        });
+                    }
+                    number = std::string_view(value.as_string()).size();
+                    break;
+                case_str("phones"):
+                    if (value.type() != minijson::Array) {
+                        minijson::ignore(json);
                         break;
-                    case_str("employment"):
+                    }
+                    minijson::parse_array(json, [&](const minijson::value& value) {
                         if (value.type() != minijson::Object) {
                             minijson::ignore(json);
-                            break;
+                            return;
                         }
                         minijson::parse_object(json, [&](const std::string_view key, const minijson::value& value) {
-                            switch_str(key, "variant", "text") {
-                            case_str("variant"):
+                            switch_str(key, "number", "type") {
+                            case_str("number"):
                                 if (value.type() != minijson::String) {
                                     minijson::ignore(json);
                                     break;
                                 }
                                 number = std::string_view(value.as_string()).size();
                                 break;
-                            case_str("text"):
+                            case_str("type"):
                                 if (value.type() != minijson::String) {
                                     minijson::ignore(json);
                                     break;
@@ -770,60 +704,75 @@ void benchmark() {
                                 break;
                             }
                         });
-                        break;
-                    default:
+                    });
+                    break;
+                case_str("employment"):
+                    if (value.type() != minijson::Object) {
                         minijson::ignore(json);
                         break;
                     }
-                });
+                    minijson::parse_object(json, [&](const std::string_view key, const minijson::value& value) {
+                        switch_str(key, "variant", "text") {
+                        case_str("variant"):
+                            if (value.type() != minijson::String) {
+                                minijson::ignore(json);
+                                break;
+                            }
+                            number = std::string_view(value.as_string()).size();
+                            break;
+                        case_str("text"):
+                            if (value.type() != minijson::String) {
+                                minijson::ignore(json);
+                                break;
+                            }
+                            number = std::string_view(value.as_string()).size();
+                            break;
+                        default:
+                            minijson::ignore(json);
+                            break;
+                        }
+                    });
+                    break;
+                default:
+                    minijson::ignore(json);
+                    break;
+                }
             });
-        }
-        end_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
-            std::chrono::steady_clock::now().time_since_epoch()).count();
-        time[2][0] = std::min(time[2][0], end_ns - begin_ns);
-    }
-    std::cout << "step 5/8" << std::endl;
+        });
+    });
 
     // =========================================================================
 
-    for (uint32_t i = 0; i < repso; ++i) {
-        begin_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
-            std::chrono::steady_clock::now().time_since_epoch()).count();
-        for (uint32_t i = 0; i < repsi; ++i) {
-            std::ostringstream stream;
-            minijson::writer_configuration cfg;
-            minijson::array_writer json(stream,
-                minijson::writer_configuration().pretty_printing(true).indent_spaces(2)
-            );
-            for (const auto& person : addressbookData) {
-                auto personObj = json.nested_object();
-                personObj.write("name", person.name);
-                personObj.write("id", person.id);
-                personObj.write("email", person.email);
-                auto phones = personObj.nested_array("phones");
-                for (const auto& phone : person.phones) {
-                    auto phoneObj = phones.nested_object();
-                    phoneObj.write("number", phone.number);
-                    phoneObj.write("type", phone.type);
-                    phoneObj.close();
-                }
-                phones.close();
-                auto employmentObj = personObj.nested_object("employment");
-                employmentObj.write("variant", person.employment.variant);
-                if (!person.employment.text.empty()) {
-                    employmentObj.write("text", person.employment.text);
-                }
-                employmentObj.close();
-                personObj.close();
+    bench.add("minijson", 1, [&](uint32_t) {
+        std::ostringstream stream;
+        minijson::writer_configuration cfg;
+        minijson::array_writer json(stream,
+            minijson::writer_configuration().pretty_printing(true).indent_spaces(2)
+        );
+        for (const auto& person : addressbookData) {
+            auto personObj = json.nested_object();
+            personObj.write("name", person.name);
+            personObj.write("id", person.id);
+            personObj.write("email", person.email);
+            auto phones = personObj.nested_array("phones");
+            for (const auto& phone : person.phones) {
+                auto phoneObj = phones.nested_object();
+                phoneObj.write("number", phone.number);
+                phoneObj.write("type", phone.type);
+                phoneObj.close();
             }
-            json.close();
-            number = stream.str().size();
+            phones.close();
+            auto employmentObj = personObj.nested_object("employment");
+            employmentObj.write("variant", person.employment.variant);
+            if (!person.employment.text.empty()) {
+                employmentObj.write("text", person.employment.text);
+            }
+            employmentObj.close();
+            personObj.close();
         }
-        end_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
-            std::chrono::steady_clock::now().time_since_epoch()).count();
-        time[2][1] = std::min(time[2][1], end_ns - begin_ns);
-    }
-    std::cout << "step 6/8" << std::endl;
+        json.close();
+        number = stream.str().size();
+    });
 
     // =========================================================================
     //   ____                  _ ____   ___  _   _            _ _   _                 _     ____   ___  __  __ 
@@ -832,77 +781,53 @@ void benchmark() {
     // | |__|_   _|_   _| | |_| |___) | |_| | |\  |  \ V  V /| | |_| | | | (_) | |_| | |_  | |_| | |_| | |  | |
     //  \____||_|   |_|    \___/|____/ \___/|_| \_|   \_/\_/ |_|\__|_| |_|\___/ \__,_|\__| |____/ \___/|_|  |_|
 
-    for (uint32_t i = 0; i < repso; ++i) {
-        begin_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
-            std::chrono::steady_clock::now().time_since_epoch()).count();
-        for (uint32_t i = 0; i < repsi; ++i) {
-            json_reader json;
-            json = addressbookJson;
+    bench.add("cpp_json_without_dom", 0, [&](uint32_t) {
+        json_reader json;
+        json = addressbookJson;
+        if (!json.is_array()) {
+            return;
+        }
+        json.parse([&](uint32_t index, const json_reader::value_t& value) {
+            if (!value.is_object()) {
+                return;
+            }
             json.parse([&](json_reader::key_t key, const json_reader::value_t& value) {
-                if (!value.is_object()) {
-                    return;
-                }
-                json.parse([&](json_reader::key_t key, const json_reader::value_t& value) {
-                    switch_str(key, "name", "id", "email", "phones", "employment") {
-                    case_str("name"):
-                        if (!value.is_string()) {
-                            return;
-                        }
-                        number = value.as_string().size();
-                        break;
-                    case_str("id"):
-                        if (!value.is_number()) {
-                            return;
-                        }
-                        number = value.as_number();
-                        break;
-                    case_str("email"):
-                        if (!value.is_string()) {
-                            return;
-                        }
-                        number = value.as_string().size();
-                        break;
-                    case_str("phones"):
-                        if (!value.is_array()) {
-                            return;
-                        }
-                        json.parse([&](json_reader::key_t key, const json_reader::value_t& value) {
-                            if (!value.is_object()) {
-                                return;
-                            }
-                            json.parse([&](json_reader::key_t key, const json_reader::value_t& value) {
-                                switch_str(key, "number", "type") {
-                                case_str("number"):
-                                    if (!value.is_string()) {
-                                        return;
-                                    }
-                                    number = value.as_string().size();
-                                    break;
-                                case_str("type"):
-                                    if (!value.is_string()) {
-                                        return;
-                                    }
-                                    number = value.as_string().size();
-                                    break;
-                                default:
-                                    break;
-                                }
-                            });
-                        });
-                        break;
-                    case_str("employment"):
+                switch_str(key, "name", "id", "email", "phones", "employment") {
+                case_str("name"):
+                    if (!value.is_string()) {
+                        return;
+                    }
+                    number = value.as_string().size();
+                    break;
+                case_str("id"):
+                    if (!value.is_number()) {
+                        return;
+                    }
+                    number = value.as_number();
+                    break;
+                case_str("email"):
+                    if (!value.is_string()) {
+                        return;
+                    }
+                    number = value.as_string().size();
+                    break;
+                case_str("phones"):
+                    if (!value.is_array()) {
+                        return;
+                    }
+                    json.parse([&](uint32_t index, const json_reader::value_t& value) {
                         if (!value.is_object()) {
                             return;
                         }
                         json.parse([&](json_reader::key_t key, const json_reader::value_t& value) {
-                            switch_str(key, "variant", "text") {
-                            case_str("variant"):
+                            switch_str(key, "number", "type") {
+                            case_str("number"):
                                 if (!value.is_string()) {
                                     return;
                                 }
                                 number = value.as_string().size();
                                 break;
-                            case_str("text"):
+                            case_str("type"):
                                 if (!value.is_string()) {
                                     return;
                                 }
@@ -912,90 +837,79 @@ void benchmark() {
                                 break;
                             }
                         });
-                        break;
-                    default:
-                        break;
+                    });
+                    break;
+                case_str("employment"):
+                    if (!value.is_object()) {
+                        return;
+                    }
+                    json.parse([&](json_reader::key_t key, const json_reader::value_t& value) {
+                        switch_str(key, "variant", "text") {
+                        case_str("variant"):
+                            if (!value.is_string()) {
+                                return;
+                            }
+                            number = value.as_string().size();
+                            break;
+                        case_str("text"):
+                            if (!value.is_string()) {
+                                return;
+                            }
+                            number = value.as_string().size();
+                            break;
+                        default:
+                            break;
+                        }
+                    });
+                    break;
+                default:
+                    break;
+                }
+            });
+        });
+        assert(json.error == nullptr);
+    });
+
+    // =========================================================================
+
+    json_writer json_wd;
+    bench.add("cpp_json_without_dom", 1, [&](uint32_t) {
+        json_wd.array([&](json_writer::array_t json) {
+        for (const auto& person : addressbookData) {
+            json
+            .object([&](json_writer::object_t json) {
+                json
+                .key("name").value(person.name)
+                .key("id").value(person.id)
+                .key("email").value(person.email)
+                .key("phones").array([&](json_writer::array_t json) {
+                for (const auto& phone : person.phones) {
+                    json.
+                    object([&](json_writer::object_t json) {
+                        json
+                        .key("number").value(phone.number)
+                        .key("type").value(phone.type);
+                    });
+                }})
+                .key("employment").object([&](json_writer::object_t json) {
+                    json.key("variant").value(person.employment.variant);
+                    if (!person.employment.text.empty()) {
+                        json.key("text").value(person.employment.text);
                     }
                 });
             });
-        }
-        end_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
-            std::chrono::steady_clock::now().time_since_epoch()).count();
-        time[3][0] = std::min(time[3][0], end_ns - begin_ns);
-    }
-    std::cout << "step 7/8" << std::endl;
+        }});
+        number = json_wd.buffer.size();
+    });
 
     // =========================================================================
 
-    {
-    json_writer json;
-    for (uint32_t i = 0; i < repso; ++i) {
-        begin_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
-            std::chrono::steady_clock::now().time_since_epoch()).count();
-        for (uint32_t i = 0; i < repsi; ++i) {
-            json.array([&](json_writer::array_t json) {
-            for (const auto& person : addressbookData) {
-                json
-                .object([&](json_writer::object_t json) {
-                    json
-                    .key("name").value(person.name)
-                    .key("id").value(person.id)
-                    .key("email").value(person.email)
-                    .key("phones").array([&](json_writer::array_t json) {
-                    for (const auto& phone : person.phones) {
-                        json.
-                        object([&](json_writer::object_t json) {
-                            json
-                            .key("number").value(phone.number)
-                            .key("type").value(phone.type);
-                        });
-                    }})
-                    .key("employment").object([&](json_writer::object_t json) {
-                        json.key("variant").value(person.employment.variant);
-                        if (!person.employment.text.empty()) {
-                            json.key("text").value(person.employment.text);
-                        }
-                    });
-                });
-            }});
-            number = json.buffer.size();
-        }
-        end_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
-            std::chrono::steady_clock::now().time_since_epoch()).count();
-        time[3][1] = std::min(time[3][1], end_ns - begin_ns);
-    }
-    }
-    std::cout << "step 8/8" << std::endl;
-
-    // =========================================================================
-
-    std::cout << "nlohmann_json:        "
-        << "read " << std::setw(5) << time[0][0] / 100 << " mcs "
-        << std::setw(3) << (time[0][0] * 100) / time[3][0] << " %   "
-        << "write " << std::setw(5) << time[0][1] / 100 << " mcs "
-        << std::setw(3) << (time[0][1] * 100) / time[3][1] << " % " << std::endl;
-    std::cout << "rapidjson:            "
-        << "read " << std::setw(5) << time[1][0] / 100 << " mcs "
-        << std::setw(3) << (time[1][0] * 100) / time[3][0] << " %   "
-        << "write " << std::setw(5) << time[1][1] / 100 << " mcs "
-        << std::setw(3) << (time[1][1] * 100) / time[3][1] << " % " << std::endl;
-    std::cout << "minijson:             "
-        << "read " << std::setw(5) << time[2][0] / 100 << " mcs "
-        << std::setw(3) << (time[2][0] * 100) / time[3][0] << " %   "
-        << "write " << std::setw(5) << time[2][1] / 100 << " mcs "
-        << std::setw(3) << (time[2][1] * 100) / time[3][1] << " % " << std::endl;
-    std::cout << "cpp_json_without_dom: "
-        << "read " << std::setw(5) << time[3][0] / 100 << " mcs 100 %   "
-        << "write " << std::setw(5) << time[3][1] / 100 << " mcs 100 %" << std::endl;
+    bench.run();
 }
 
 int32_t main() {
     test();
-    std::cout << "success" << std::endl;
-    std::cin.get();
-
     benchmark();
-    std::cout << "finish" << std::endl;
     std::cin.get();
     return 0;
 }

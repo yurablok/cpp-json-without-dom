@@ -13,3 +13,6 @@
 [submodule "tests/minijson_writer"]
 	path = tests/minijson_writer
 	url = https://github.com/giacomodrago/minijson_writer.git
+[submodule "tests/cpp-adaptive-benchmark"]
+	path = tests/cpp-adaptive-benchmark
+	url = https://github.com/yurablok/cpp-adaptive-benchmark.git

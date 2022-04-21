@@ -6,6 +6,7 @@
 // License: BSL-1.0
 // https://github.com/yurablok/cpp-json-without-dom
 // History:
+// v0.7 2022-Apr-21     json_reader now works with two types of handlers (object and array).
 // v0.6 2022-Mar-24     Proper handling of `double` in `charconv` support in GCC.
 // v0.5 2021-Dec-24     Autoconvert `nan` and `inf` to `null` in json_writer.
 // v0.4 2021-Dec-15     Return void in handlers for json_reader.
@@ -25,7 +26,7 @@
 #elif __cplusplus >= 201703L
 #   if defined(__GNUG__)
 #       define CJWD_CPP_LIB_CHARCONV
-#       if defined(__cpp_lib_to_chars)
+#       if defined(__cpp_lib_to_chars) || defined(_GLIBCXX_HAVE_USELOCALE)
 #           define CJWD_CPP_LIB_CHARCONV_FLOAT
 #       endif
 #   else
@@ -82,14 +83,31 @@ namespace std {
 }
 #endif
 
+
 struct json_reader {
     const char* begin = nullptr;
     const char* end = nullptr; // begin + size
     const char* error = nullptr; // check after parse
+    uint8_t rootType = 0; // 1 - object, 2 - array
+
     void operator=(const std::string_view json) {
         begin = json.data();
         end = json.data() + json.size();
         error = nullptr;
+        rootType = 0;
+        while (begin < end) {
+            switch (*begin++) {
+            case '{':
+                rootType = 1;
+                return;
+            case '[':
+                rootType = 2;
+                return;
+            default:
+                break;
+            }
+        }
+        error = begin;
     }
 
     struct object_t {};
@@ -97,7 +115,7 @@ struct json_reader {
     struct null_t {};
     using key_t = std::string_view;
     enum idx : uint8_t {
-        number_idx, // use string for big integer
+        number_idx, // use strings for big integers
         string_idx,
         boolean_idx,
         array_idx,
@@ -135,26 +153,28 @@ struct json_reader {
         }
     };
 
-    // handler -> true  if processed
-    // handler -> false if skipped
+    bool is_object() const {
+        return rootType == 1;
+    }
+    bool is_array() const {
+        return rootType == 2;
+    }
+
     void parse(std::function<void(key_t key, const value_t& value)> handler) {
         if (error != nullptr) {
             return;
         }
         enum class steps : uint8_t {
-            undefined,
+            next,
             key,
             colon,
             value,
             number,
             string,
-            next,
             comment,
-        } step = steps::undefined;
+        } step = steps::next;
 
         const char* beginStr = nullptr;
-        bool isObject = false;
-        bool isKey = false;
         bool isPrevEscape = false;
         bool isStringWithEscape = false;
         key_t key;
@@ -163,15 +183,19 @@ struct json_reader {
         std::string valueStr;
         for (; begin < end; ++begin) {
             switch (step) {
-            case steps::undefined:
+            case steps::next:
                 switch (*begin) {
-                case '{':
-                    step = steps::key;
-                    isObject = true;
+                case '}':
+                    return;
+                case ',':
                     break;
-                case '[':
-                    step = steps::value;
-                    isObject = false;
+                case '"':
+                    step = steps::key;
+                    beginStr = begin + 1;
+                    break;
+                case '/':
+                    step = steps::comment;
+                    beginStr = begin;
                     break;
                 case ' ': case '\t': case '\r': case '\n':
                     break;
@@ -181,39 +205,40 @@ struct json_reader {
                 }
                 break;
             case steps::key:
-                switch (*begin) {
-                case '/':
-                    step = steps::comment;
-                    beginStr = begin;
-                    break;
-                case '{': {
-                    value.emplace<object_idx>();
-                    auto beginBefore = begin;
+                if (isPrevEscape) {
+                    isPrevEscape = false;
                     if (handler) {
-                        handler(key, value);
+                        keyStr.push_back(*begin);
                     }
-                    if (begin == beginBefore) {
-                        parse(nullptr);
-                    }
-                    if (error != nullptr) {
-                        return;
-                    }
-                    step = steps::next;
                     break;
                 }
-                case '}':
-                    return;
+                switch (*begin) {
                 case '"':
-                    step = steps::string;
-                    beginStr = begin + 1;
-                    isKey = true;
-                    isStringWithEscape = false;
+                    step = steps::colon;
+                    //if (!handler) {
+                    //    break;
+                    //}
+                    if (isStringWithEscape) {
+                        key = keyStr;
+                    }
+                    else {
+                        key = std::string_view(beginStr, begin - beginStr);
+                    }
                     break;
-                case ' ': case '\t': case '\r': case '\n':
+                case '\\':
+                    isPrevEscape = true;
+                    if (!!handler & !isStringWithEscape) {
+                        isStringWithEscape = true;
+                        if (beginStr != begin) {
+                            keyStr = std::string(beginStr, begin - beginStr);
+                        }
+                    }
                     break;
                 default:
-                    error = begin;
-                    return;
+                    if (!!handler & isStringWithEscape) {
+                        keyStr.push_back(*begin);
+                    }
+                    break;
                 }
                 break;
             case steps::colon:
@@ -230,22 +255,14 @@ struct json_reader {
                 break;
             case steps::value:
                 switch (*begin) {
-                case '/':
-                    if (isObject) {
-                        error = begin;
-                        return;
-                    }
-                    step = steps::comment;
-                    beginStr = begin;
-                    break;
                 case '{': {
                     value.emplace<object_idx>();
-                    auto beginBefore = begin;
+                    auto beginBefore = ++begin;
                     if (handler) {
                         handler(key, value);
                     }
                     if (begin == beginBefore) {
-                        parse(nullptr);
+                        parse(std::function<void(key_t, const value_t&)>());
                     }
                     if (error != nullptr) {
                         return;
@@ -253,16 +270,14 @@ struct json_reader {
                     step = steps::next;
                     break;
                 }
-                case '}':
-                    return;
                 case '[': {
                     value.emplace<array_idx>();
-                    auto beginBefore = begin;
+                    auto beginBefore = ++begin;
                     if (handler) {
                         handler(key, value);
                     }
                     if (begin == beginBefore) {
-                        parse(nullptr);
+                        parse(std::function<void(uint32_t, const value_t&)>());
                     }
                     if (error != nullptr) {
                         return;
@@ -270,8 +285,6 @@ struct json_reader {
                     step = steps::next;
                     break;
                 }
-                case ']':
-                    return;
                 case '"':
                     step = steps::string;
                     beginStr = begin + 1;
@@ -289,32 +302,29 @@ struct json_reader {
                     if (end - begin >= 5) {
                         if (std::string_view(begin, 4) == "null") {
                             begin += 4 - 1;
-                            step = steps::next;
-                            if (!handler) {
-                                continue;
+                            if (handler) {
+                                value.emplace<null_idx>();
+                                handler(key, value);
                             }
-                            value.emplace<null_idx>();
-                            handler(key, value);
+                            step = steps::next;
                             break;
                         }
                         else if (std::string_view(begin, 4) == "true") {
                             begin += 4 - 1;
-                            step = steps::next;
-                            if (!handler) {
-                                continue;
+                            if (handler) {
+                                value.emplace<boolean_idx>(true);
+                                handler(key, value);
                             }
-                            value.emplace<boolean_idx>(true);
-                            handler(key, value);
+                            step = steps::next;
                             break;
                         }
                         else if (std::string_view(begin, 5) == "false") {
                             begin += 5 - 1;
-                            step = steps::next;
-                            if (!handler) {
-                                continue;
+                            if (handler) {
+                                value.emplace<boolean_idx>(false);
+                                handler(key, value);
                             }
-                            value.emplace<boolean_idx>(false);
-                            handler(key, value);
+                            step = steps::next;
                             break;
                         }
                     }
@@ -346,52 +356,26 @@ struct json_reader {
                         return;
                     }
 #               endif
-                    step = steps::next;
                     --begin;
-                    if (!handler) {
-                        continue;
+                    if (handler) {
+                        value.emplace<number_idx>(v);
+                        handler(key, value);
                     }
-                    value.emplace<number_idx>(v);
-                    handler(key, value);
+                    step = steps::next;
                     break;
                 }
                 break;
             case steps::string:
                 if (isPrevEscape) {
                     isPrevEscape = false;
-                    if (!handler) {
-                        break;
-                    }
-                    if (isKey) {
-                        keyStr.push_back(*begin);
-                    }
-                    else {
+                    if (handler) {
                         valueStr.push_back(*begin);
                     }
                     break;
                 }
                 switch (*begin) {
-                case '"': {
-                    const bool isKeyCopy = isKey;
-                    if (isKey) {
-                        step = steps::colon;
-                        isKey = false;
-                    }
-                    else {
-                        step = steps::next;
-                    }
-                    if (!handler) {
-                        break;
-                    }
-                    if (isKeyCopy) {
-                        if (isStringWithEscape) {
-                            key = keyStr;
-                        }
-                        else {
-                            key = std::string_view(beginStr, begin - beginStr);
-                        }
-                    }
-                    else {
+                case '"':
+                    if (handler) {
                         if (isStringWithEscape) {
                             value.emplace<string_idx>(valueStr);
                         }
@@ -402,68 +386,230 @@ struct json_reader {
                         keyStr.clear();
                         valueStr.clear();
                     }
+                    step = steps::next;
                     break;
-                }
                 case '\\':
                     isPrevEscape = true;
-                    if (!handler) {
-                        break;
-                    }
-                    if (!isStringWithEscape) {
+                    if (!!handler & !isStringWithEscape) {
                         isStringWithEscape = true;
                         if (beginStr != begin) {
-                            if (isKey) {
-                                keyStr = std::string(beginStr, begin - beginStr);
-                            }
-                            else {
-                                valueStr = std::string(beginStr, begin - beginStr);
-                            }
+                            valueStr = std::string(beginStr, begin - beginStr);
                         }
                     }
                     break;
                 default:
-                    if (!handler) {
-                        break;
-                    }
-                    if (isStringWithEscape) {
-                        if (isKey) {
-                            keyStr.push_back(*begin);
-                        }
-                        else {
-                            valueStr.push_back(*begin);
-                        }
+                    if (!!handler & isStringWithEscape) {
+                        valueStr.push_back(*begin);
                     }
                     break;
-                }
-                break;
-            case steps::next:
-                switch (*begin) {
-                case ',':
-                    step = isObject ? steps::key : steps::value;
-                    break;
-                case '}':
-                    if (!isObject) {
-                        error = begin;
-                        return;
-                    }
-                    return;
-                case ']':
-                    if (isObject) {
-                        error = begin;
-                        return;
-                    }
-                    return;
-                case ' ': case '\t': case '\r': case '\n':
-                    break;
-                default:
-                    error = begin;
-                    return;
                 }
                 break;
             case steps::comment:
                 switch (*begin) {
                 case '\r': case '\n':
-                    step = isObject ? steps::key : steps::value;
+                    step = steps::next;
+                    break;
+                default:
+                    break;
+                }
+                break;
+            default:
+                break;
+            }
+        }
+        if (step == steps::string) {
+            error = begin;
+        }
+    }
+
+    void parse(std::function<void(uint32_t index, const value_t& value)> handler) {
+        if (error != nullptr) {
+            return;
+        }
+        enum class steps : uint8_t {
+            next,
+            number,
+            string,
+            comment,
+        } step = steps::next;
+
+        const char* beginStr = nullptr;
+        bool isPrevEscape = false;
+        bool isStringWithEscape = false;
+        uint32_t index = 0;
+        value_t value;
+        std::string valueStr;
+        for (; begin < end; ++begin) {
+            switch (step) {
+            case steps::next:
+                switch (*begin) {
+                case ']':
+                    return;
+                case ',':
+                    break;
+                case '{': {
+                    value.emplace<object_idx>();
+                    auto beginBefore = ++begin;
+                    if (handler) {
+                        handler(index, value);
+                    }
+                    if (begin == beginBefore) {
+                        parse(std::function<void(key_t, const value_t&)>());
+                    }
+                    if (error != nullptr) {
+                        return;
+                    }
+                    step = steps::next;
+                    ++index;
+                    break;
+                }
+                case '[': {
+                    value.emplace<array_idx>();
+                    auto beginBefore = ++begin;
+                    if (handler) {
+                        handler(index, value);
+                    }
+                    if (begin == beginBefore) {
+                        parse(std::function<void(uint32_t, const value_t&)>());
+                    }
+                    if (error != nullptr) {
+                        return;
+                    }
+                    step = steps::next;
+                    ++index;
+                    break;
+                }
+                case '-': case '+':
+                case '0': case '1': case '2': case '3': case '4':
+                case '5': case '6': case '7': case '8': case '9':
+                    step = steps::number;
+                    beginStr = begin;
+                    break;
+                case '"':
+                    step = steps::string;
+                    beginStr = begin + 1;
+                    isStringWithEscape = false;
+                    break;
+                case '/':
+                    step = steps::comment;
+                    beginStr = begin;
+                    break;
+                case ' ': case '\t': case '\r': case '\n':
+                    break;
+                default:
+                    if (end - begin >= 5) {
+                        if (std::string_view(begin, 4) == "null") {
+                            begin += 4 - 1;
+                            if (handler) {
+                                value.emplace<null_idx>();
+                                handler(index, value);
+                            }
+                            step = steps::next;
+                            ++index;
+                            break;
+                        }
+                        else if (std::string_view(begin, 4) == "true") {
+                            begin += 4 - 1;
+                            if (handler) {
+                                value.emplace<boolean_idx>(true);
+                                handler(index, value);
+                            }
+                            step = steps::next;
+                            ++index;
+                            break;
+                        }
+                        else if (std::string_view(begin, 5) == "false") {
+                            begin += 5 - 1;
+                            if (handler) {
+                                value.emplace<boolean_idx>(false);
+                                handler(index, value);
+                            }
+                            step = steps::next;
+                            ++index;
+                            break;
+                        }
+                    }
+                    error = begin;
+                    return;
+                }
+                break;
+            case steps::number:
+                switch (*begin) {
+                case '-': case '+':
+                case '0': case '1': case '2': case '3': case '4':
+                case '5': case '6': case '7': case '8': case '9':
+                case '.': case 'e': case 'E':
+                    break;
+                default:
+                    double v = 0.0;
+#               if defined(CJWD_CPP_LIB_CHARCONV_FLOAT)
+                    auto [ptr, ec] = std::from_chars(beginStr, begin, v);
+                    if (ptr != begin || ec != std::errc()) {
+                        error = ptr;
+                        return;
+                    }
+#               else
+                    char format[8];
+                    std::snprintf(format, sizeof(format), "%%%ulf",
+                        static_cast<uint32_t>(begin - beginStr));
+                    if (std::sscanf(beginStr, format, &v) != 1) {
+                        error = beginStr;
+                        return;
+                    }
+#               endif
+                    --begin;
+                    if (handler) {
+                        value.emplace<number_idx>(v);
+                        handler(index, value);
+                    }
+                    step = steps::next;
+                    ++index;
+                    break;
+                }
+                break;
+            case steps::string:
+                if (isPrevEscape) {
+                    isPrevEscape = false;
+                    if (handler) {
+                        valueStr.push_back(*begin);
+                    }
+                    break;
+                }
+                switch (*begin) {
+                case '"':
+                    if (handler) {
+                        if (isStringWithEscape) {
+                            value.emplace<string_idx>(valueStr);
+                        }
+                        else {
+                            value.emplace<string_idx>(std::string_view(beginStr, begin - beginStr));
+                        }
+                        handler(index, value);
+                        valueStr.clear();
+                    }
+                    step = steps::next;
+                    ++index;
+                    break;
+                case '\\':
+                    isPrevEscape = true;
+                    if (!!handler & !isStringWithEscape) {
+                        isStringWithEscape = true;
+                        if (beginStr != begin) {
+                            valueStr = std::string(beginStr, begin - beginStr);
+                        }
+                    }
+                    break;
+                default:
+                    if (!!handler & isStringWithEscape) {
+                        valueStr.push_back(*begin);
+                    }
+                    break;
+                }
+                break;
+            case steps::comment:
+                switch (*begin) {
+                case '\r': case '\n':
+                    step = steps::next;
                     break;
                 default:
                     break;
@@ -505,35 +651,39 @@ private:
     }
     void string(const std::string_view str) {
         for (const auto c : str) {
-            switch (c) {
-            case '"':
-                buffer.push_back('\\');
-                buffer.push_back('"');
-                break;
-            case '\\':
-                buffer.push_back('\\');
-                buffer.push_back('\\');
-                break;
+            switch (c - 8) {
             //case '/':
-            case '\t':
+            case '\b' - 8: // 08
+                buffer.push_back('\\');
+                buffer.push_back('b');
+                break;
+            case '\t' - 8: // 09
                 buffer.push_back('\\');
                 buffer.push_back('t');
                 break;
-            case '\n':
+            case '\n' - 8: // 10
                 buffer.push_back('\\');
                 buffer.push_back('n');
                 break;
-            case '\r':
+            case 11 - 8: //   11
                 buffer.push_back('\\');
-                buffer.push_back('r');
+                buffer.push_back('?');
                 break;
-            case '\f':
+            case '\f' - 8: // 12
                 buffer.push_back('\\');
                 buffer.push_back('f');
                 break;
-            case '\b':
+            case '\r' - 8: // 13
                 buffer.push_back('\\');
-                buffer.push_back('b');
+                buffer.push_back('r');
+                break;
+            case '"' - 8: //  34
+                buffer.push_back('\\');
+                buffer.push_back('"');
+                break;
+            case '\\' - 8: // 92
+                buffer.push_back('\\');
+                buffer.push_back('\\');
                 break;
             default:
                 buffer.push_back(c);

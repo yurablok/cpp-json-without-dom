@@ -14,7 +14,7 @@ a simplicity of the format.
 ### Benefits and features:
 
 - fast (see comparison)
-- minimal API, single header ~850 LOC
+- minimal API, single header ~1000 LOC
 - one-pass parser without intermediate DOM representation 
 - zero-copy parse if no escape (`\`)
 - single-line comments (`// ...`)
@@ -59,6 +59,7 @@ For faster key matching, it is recommended to use
 ```cpp
 json_reader json;
 json = string_to_parse;
+assert(json.is_object());
 json.parse([&json](json_parse::key_t key, const json_parse::value_t& value) {
     switch_str(key, "number", "array") {
     case_str("number"):
@@ -71,9 +72,8 @@ json.parse([&json](json_parse::key_t key, const json_parse::value_t& value) {
         if (!value.is_array()) {
             return;
         }
-        uint8_t index = 0;
-        json.parse([&index](json_parse::key_t key, const json_parse::value_t& value) {
-            switch (index++) {
+        json.parse([](uint32_t index, const json_parse::value_t& value) {
+            switch (index) {
             case 0:
                 assert(value.is_string());
                 break;

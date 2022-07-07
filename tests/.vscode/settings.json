@@ -1,12 +1,19 @@
 {
     "C_Cpp.intelliSenseCachePath": "${workspaceFolder}/.vscode",
+    //"C_Cpp.intelliSenseCacheSize": 0, // If disk storage is slow
 
     "editor.defaultFormatter": "ms-vscode.cpptools",
     "editor.rulers": [ 80, 100 ],
     "editor.cursorStyle": "block",
     "editor.minimap.enabled": false,
     "[Log]": { "editor.wordWrap": "on" },
-    
+
+    "files.trimTrailingWhitespace": true,
+    "[markdown]": {
+        "files.trimTrailingWhitespace": false
+    },
+    "files.trimFinalNewlines": true,
+
     "explorer.autoReveal": false,
     "scm.autoReveal": false,
     "scm.defaultViewMode": "tree",
@@ -17,9 +24,11 @@
     //"cmake.parallelJobs": 1, // 0 - not working
 
     "cmake.configureSettings": {
-        "CMAKE_BUILD_TYPE": "${buildType}"
+        "CMAKE_BUILD_TYPE": "${buildType}",
+        "CMAKE_CONFIGURATION_TYPES": "${buildType}"
     },
     "cmake.setBuildTypeOnMultiConfig": true,
+    "cmake.buildTask": true,
 
     "cmake.buildDirectory": "${workspaceFolder}/build/.cmake/${buildType}-${generator}",
     "cmake.debugConfig": {
@@ -36,78 +45,5 @@
     },
     "workbench.colorCustomizations": {
         "statusBar.background": "#123456"
-    },
-
-    "files.associations": {
-        "*.tcc": "cpp",
-        "algorithm": "cpp",
-        "array": "cpp",
-        "atomic": "cpp",
-        "bit": "cpp",
-        "bitset": "cpp",
-        "cctype": "cpp",
-        "charconv": "cpp",
-        "chrono": "cpp",
-        "cinttypes": "cpp",
-        "clocale": "cpp",
-        "cmath": "cpp",
-        "codecvt": "cpp",
-        "compare": "cpp",
-        "concepts": "cpp",
-        "condition_variable": "cpp",
-        "csignal": "cpp",
-        "cstdarg": "cpp",
-        "cstddef": "cpp",
-        "cstdint": "cpp",
-        "cstdio": "cpp",
-        "cstdlib": "cpp",
-        "cstring": "cpp",
-        "ctime": "cpp",
-        "cwchar": "cpp",
-        "cwctype": "cpp",
-        "deque": "cpp",
-        "exception": "cpp",
-        "forward_list": "cpp",
-        "fstream": "cpp",
-        "functional": "cpp",
-        "initializer_list": "cpp",
-        "iomanip": "cpp",
-        "iosfwd": "cpp",
-        "iostream": "cpp",
-        "istream": "cpp",
-        "iterator": "cpp",
-        "limits": "cpp",
-        "list": "cpp",
-        "map": "cpp",
-        "memory_resource": "cpp",
-        "memory": "cpp",
-        "mutex": "cpp",
-        "new": "cpp",
-        "numbers": "cpp",
-        "numeric": "cpp",
-        "ostream": "cpp",
-        "random": "cpp",
-        "ratio": "cpp",
-        "regex": "cpp",
-        "semaphore": "cpp",
-        "set": "cpp",
-        "span": "cpp",
-        "sstream": "cpp",
-        "stdexcept": "cpp",
-        "stop_token": "cpp",
-        "streambuf": "cpp",
-        "string_view": "cpp",
-        "string": "cpp",
-        "system_error": "cpp",
-        "thread": "cpp",
-        "tuple": "cpp",
-        "type_traits": "cpp",
-        "typeinfo": "cpp",
-        "unordered_map": "cpp",
-        "unordered_set": "cpp",
-        "utility": "cpp",
-        "valarray": "cpp",
-        "variant": "cpp",
-        "vector": "cpp"
     }
 }

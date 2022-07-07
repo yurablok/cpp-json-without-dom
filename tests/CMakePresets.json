@@ -4,20 +4,17 @@
     {
       "name": "x64-Debug-Linux",
       "displayName": "Preset",
-      "configurePreset": "x64-Debug-Linux",
-      "jobs": 0
+      "configurePreset": "x64-Debug-Linux"
     },
     {
       "name": "x64-Release-Linux",
       "displayName": "Preset",
-      "configurePreset": "linux-default",
-      "jobs": 0
+      "configurePreset": "linux-default"
     },
     {
       "name": "x64-RelNoDebInfo-Linux",
       "displayName": "Preset",
-      "configurePreset": "x64-RelNoDebInfo-Linux",
-      "jobs": 0
+      "configurePreset": "x64-RelNoDebInfo-Linux"
     },
     {
       "name": "x32-Debug-Windows",
@@ -54,10 +51,11 @@
     {
       "name": "x64-Debug-Linux",
       "displayName": "x64-Debug-Linux",
-      "generator": "Unix Makefiles",
+      "generator": "Ninja",
       "binaryDir": "${sourceDir}/build/.cmake/${presetName}",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug"
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_CONFIGURATION_TYPES": "Debug"
       },
       "vendor": {
         "microsoft.com/VisualStudioSettings/CMake/1.0": {
@@ -68,10 +66,11 @@
     {
       "name": "linux-default",
       "displayName": "x64-Release-Linux",
-      "generator": "Unix Makefiles",
+      "generator": "Ninja",
       "binaryDir": "${sourceDir}/build/.cmake/x64-Release-Linux",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "RelWithDebInfo"
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "CMAKE_CONFIGURATION_TYPES": "RelWithDebInfo"
       },
       "vendor": {
         "microsoft.com/VisualStudioSettings/CMake/1.0": {
@@ -82,10 +81,11 @@
     {
       "name": "x64-RelNoDebInfo-Linux",
       "displayName": "x64-RelNoDebInfo-Linux",
-      "generator": "Unix Makefiles",
+      "generator": "Ninja",
       "binaryDir": "${sourceDir}/build/.cmake/${presetName}",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Release"
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_CONFIGURATION_TYPES": "Release"
       },
       "vendor": {
         "microsoft.com/VisualStudioSettings/CMake/1.0": {

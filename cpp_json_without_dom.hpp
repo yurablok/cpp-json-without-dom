@@ -44,6 +44,8 @@
 #   include "variant.hpp" // https://github.com/mpark/variant
 namespace std {
     using string_view = nonstd::string_view;
+    template <typename T>
+    using basic_string_view = nonstd::basic_string_view<T>;
 
     template <typename... args_t>
     using variant = mpark::variant<args_t...>;
@@ -794,6 +796,11 @@ public:
             writer->buffer.push_back(',');
             return { writer };
         }
+#   ifdef __cpp_lib_char8_t
+        object_t value(const std::u8string_view string) {
+            return value(std::string_view(reinterpret_cast<const char*>(string.data()), string.size()));
+        }
+#   endif // __cpp_lib_char8_t
         object_t value(const double number) {
             if (std::isnan(number) || std::isinf(number)) {
                 return value(nullptr);
@@ -952,6 +959,11 @@ public:
             writer->buffer.push_back(',');
             return *this;
         }
+#   ifdef __cpp_lib_char8_t
+        array_t& value(const std::u8string_view string) {
+            return value(std::string_view(reinterpret_cast<const char*>(string.data()), string.size()));
+        }
+#   endif // __cpp_lib_char8_t
         array_t& value(const double number) {
             if (std::isnan(number) || std::isinf(number)) {
                 return value(nullptr);

@@ -88,6 +88,10 @@ macro(init_project targetName targetArgs)
         if ("${CMAKE_BUILD_TYPE}" STREQUAL "Debug")
             add_compile_options(
                 /JMC # Just My Code Debugging
+                /ZI # Debug Information with Edit and Continue
+            )
+            add_link_options(
+                /INCREMENTAL # For Edit and Continue
             )
         endif()
 

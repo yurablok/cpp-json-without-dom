@@ -23,30 +23,38 @@
 #if defined(_MSVC_LANG) && _MSVC_LANG >= 201703L
 #   define CJWD_CPP_LIB_CHARCONV
 #   define CJWD_CPP_LIB_CHARCONV_FLOAT
+#   define CJWD_CPP_LIB_VARIANT
 #elif __cplusplus >= 201703L
 #   if defined(__GNUG__)
-#       define CJWD_CPP_LIB_CHARCONV
-#       if defined(__cpp_lib_to_chars) || defined(_GLIBCXX_HAVE_USELOCALE)
-#           define CJWD_CPP_LIB_CHARCONV_FLOAT
+#       if __GNUC__ >= 8 && __GNUC_MINOR__ >= 1
+#           define CJWD_CPP_LIB_CHARCONV
+#           if defined(__cpp_lib_to_chars) || defined(_GLIBCXX_HAVE_USELOCALE)
+#               define CJWD_CPP_LIB_CHARCONV_FLOAT
+#           endif
 #       endif
+#       define CJWD_CPP_LIB_VARIANT
 #   else
 #       define CJWD_CPP_LIB_CHARCONV
 #       define CJWD_CPP_LIB_CHARCONV_FLOAT
+#       define CJWD_CPP_LIB_VARIANT
 #   endif
 #endif
 
 #if defined(CJWD_CPP_LIB_CHARCONV)
 #   include <string_view>
-#   include <variant>
 #   include <charconv>
 #else
 #   include "string_view.hpp" // https://github.com/martinmoene/string-view-lite
-#   include "variant.hpp" // https://github.com/mpark/variant
 namespace std {
     using string_view = nonstd::string_view;
-    template <typename T>
-    using basic_string_view = nonstd::basic_string_view<T>;
+}
+#endif
 
+#if defined(CJWD_CPP_LIB_VARIANT)
+#   include <variant>
+#else
+#   include "variant.hpp" // https://github.com/mpark/variant
+namespace std {
     template <typename... args_t>
     using variant = mpark::variant<args_t...>;
     

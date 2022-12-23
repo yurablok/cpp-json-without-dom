@@ -447,7 +447,7 @@ void benchmark() {
 
     Benchmark bench;
     bench.setColumnsNumber(2);
-    volatile int32_t number = 0;
+    static volatile int32_t number = 0;
 
     // =========================================================================
     //      _ ____   ___  _   _    __              __  __           _                    ____            

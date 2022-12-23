@@ -1,3 +1,10 @@
+# CMake Utils
+# https://github.com/yurablok/cmake-cpp-template
+#
+# History:
+# v0.2  2022-Nov-20     Added support for Windows ARM64.
+# v0.1  2022-Oct-18     First release.
+
 # Call it before the main `project(...)`
 macro(check_build_directory)
     if(${CMAKE_SOURCE_DIR} STREQUAL ${CMAKE_BINARY_DIR})
@@ -11,9 +18,27 @@ macro(check_build_directory)
     endif()
 endmacro(check_build_directory)
 
-# Call it after the main `project(...)` and before the main `add_subdirectory(...)`
-macro(init_project targetName targetArgs)
-    if("${CMAKE_SYSTEM_PROCESSOR}" MATCHES "(arm|ARM).*")
+# Call it after the main `project(...)` and before any `add_subdirectory(...)`
+# Example:
+#   init_project("client --ip=localhost" "server")
+function(init_project)
+    if(NOT "${CMAKE_SOURCE_DIR}" STREQUAL "${CMAKE_CURRENT_SOURCE_DIR}")
+        message(WARNING "CMakeUtils.cmake is not in the root.")
+        return()
+    endif()
+
+    cmake_parse_arguments(arg "" "" "" "${ARGN}")
+    if(NOT DEFINED arg_UNPARSED_ARGUMENTS)
+        message(FATAL_ERROR "At least one target must be specified.")
+    endif()
+
+    if(NOT "${CMAKE_CXX_COMPILER_ARCHITECTURE_ID}" STREQUAL "")
+        set(CMAKE_TARGET_ARCH ${CMAKE_CXX_COMPILER_ARCHITECTURE_ID})
+    else()
+        set(CMAKE_TARGET_ARCH ${CMAKE_SYSTEM_PROCESSOR})
+    endif()
+    message("CMAKE_TARGET_ARCH: ${CMAKE_TARGET_ARCH}")
+    if("${CMAKE_TARGET_ARCH}" MATCHES "(arm|ARM|aarch).*")
         if(CMAKE_SIZEOF_VOID_P EQUAL 8)
             set(BUILD_ARCH "arm64")
         else()
@@ -48,43 +73,38 @@ macro(init_project targetName targetArgs)
     endif()
 
     set(BUILD_FOLDER "${BUILD_ARCH}-${BUILD_TYPE}-${BUILD_PLATFORM}")
+    message("BUILD_FOLDER: ${BUILD_FOLDER}")
 
-    set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/build/${BUILD_FOLDER}")
-    set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/build/${BUILD_FOLDER}")
-    set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/build/${BUILD_FOLDER}")
+    set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/build/${BUILD_FOLDER}" PARENT_SCOPE)
+    set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/build/${BUILD_FOLDER}" PARENT_SCOPE)
+    set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/build/${BUILD_FOLDER}" PARENT_SCOPE)
 
+    file(MAKE_DIRECTORY "${CMAKE_SOURCE_DIR}/build/.cmake")
     file(MAKE_DIRECTORY "${CMAKE_SOURCE_DIR}/workdir")
+
+    if("${CMAKE_SYSROOT}" STREQUAL "")
+        #NOTE: clangd linter config
+        file(WRITE ".clangd" "CompileFlags:\n  CompilationDatabase: build/.cmake/${BUILD_FOLDER}\n")
+        set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+    endif()
 
     if (NOT "${CMAKE_BUILD_TYPE}" STREQUAL "Debug")
         #NOTE: Link-Time Global Optimization
-        set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)
+        set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE PARENT_SCOPE)
     endif()
 
-    if("${CMAKE_CXX_COMPILER_ID}" MATCHES "(GNU|Clang)")
-        # -O3 -g0   3.4 MB  default Release
-        # -O3 -g1   9.5 MB
-        # -O2 -g1   9.3 MB
-        # -O2 -g2  41.0 MB  default RelWithDebInfo
-        # -O0 -g2  35.0 MB  default Debug
-        # Level 1 produces minimal information, enough for making backtraces in parts
-        # of the program that you don’t plan to debug. This includes descriptions of
-        # functions and external variables, and line number tables, but no information
-        # about local variables.
-        set(CMAKE_C_FLAGS_RELWITHDEBINFO "-O3 -g1 -DNDEBUG")
-        set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O3 -g1 -DNDEBUG")
-        
-        if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
-            add_compile_options(-fdiagnostics-color=always)
-        elseif("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
+    if(MSVC)
+        if(NOT "${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
+            add_compile_options(
+                /utf-8 # Set source and execution character sets to UTF-8
+                /sdl # Enable Additional Security Checks
+                /MP # Build with Multiple Processes
+                /permissive- # Standards conformance
+            )
+        else()
             add_compile_options(-fcolor-diagnostics)
         endif()
 
-    elseif("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
-        add_compile_options(
-            /utf-8 # Set source and execution character sets to UTF-8
-            /sdl # Enable Additional Security Checks
-            /MP # Build with Multiple Processes
-        )
         if ("${CMAKE_BUILD_TYPE}" STREQUAL "Debug")
             add_compile_options(
                 /JMC # Just My Code Debugging
@@ -100,24 +120,42 @@ macro(init_project targetName targetArgs)
         # The /Zi option produces a separate PDB file that contains all the symbolic
         # debugging information for use with the debugger. The debugging information
         # isn't included in the object files or executable, which makes them much smaller.
-        set(CMAKE_C_FLAGS_RELWITHDEBINFO "/MD /Zi /O2 /Ob2 /DNDEBUG")
-        set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "/MD /Zi /O2 /Ob2 /DNDEBUG")
+        set(CMAKE_C_FLAGS_RELWITHDEBINFO "/MD /Zi /O2 /Ob2 /DNDEBUG" PARENT_SCOPE)
+        set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "/MD /Zi /O2 /Ob2 /DNDEBUG" PARENT_SCOPE)
 
-        __write_msvs_launch_vs_json("${targetName}" "${targetArgs}")
+        __write_msvs_launch_vs_json("${arg_UNPARSED_ARGUMENTS}")
+
+    elseif("${CMAKE_CXX_COMPILER_ID}" MATCHES "(GNU|Clang)")
+        # -O3 -g0   3.4 MB  default Release
+        # -O3 -g1   9.5 MB
+        # -O2 -g1   9.3 MB
+        # -O2 -g2  41.0 MB  default RelWithDebInfo
+        # -O0 -g2  35.0 MB  default Debug
+        # Level 1 produces minimal information, enough for making backtraces in parts
+        # of the program that you don’t plan to debug. This includes descriptions of
+        # functions and external variables, and line number tables, but no information
+        # about local variables.
+        set(CMAKE_C_FLAGS_RELWITHDEBINFO "-O3 -g1 -DNDEBUG" PARENT_SCOPE)
+        set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O3 -g1 -DNDEBUG" PARENT_SCOPE)
+        
+        if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
+            add_compile_options(-fdiagnostics-color=always)
+        elseif("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
+            add_compile_options(-fcolor-diagnostics)
+        endif()
 
     else()
         message(FATAL_ERROR "Unknown compiler: ${CMAKE_CXX_COMPILER_ID}")
     endif()
 
-    if(CMAKE_SIZEOF_VOID_P EQUAL 8)
-        set(Qt5Path "${Qt5x64Path}")
-    else()
-        set(Qt5Path "${Qt5x32Path}")
-    endif()
-endmacro(init_project)
+    set(BUILD_ARCH "${BUILD_ARCH}" PARENT_SCOPE)
+    set(BUILD_TYPE "${BUILD_TYPE}" PARENT_SCOPE)
+    set(BUILD_PLATFORM "${BUILD_PLATFORM}" PARENT_SCOPE)
+    set(BUILD_FOLDER "${BUILD_FOLDER}" PARENT_SCOPE)
+endfunction(init_project)
 
 
-function(__write_msvs_launch_vs_json targetName targetArgs)
+function(__write_msvs_launch_vs_json targets)
     set(cfgPath "${CMAKE_SOURCE_DIR}/.vs/launch.vs.json")
     #set(cfgSize_b 0)
     #if(EXISTS "${cfgPath}")
@@ -134,7 +172,8 @@ function(__write_msvs_launch_vs_json targetName targetArgs)
     set(json "${json}  \"NOTE\": \"This file was generated by CMakeUtils.cmake\",\n")
     set(json "${json}  \"version\": \"0.2.1\",\n")
     set(json "${json}  \"configurations\": [\n")
-    macro(add appPath qtPath comma)
+
+    macro(add appPath qtPath targetName targetArgs)
         string(REPLACE "/" "\\\\" targetPath "${CMAKE_SOURCE_DIR}/build/${appPath}/${targetName}")
         set(json "${json}    {\n")
         set(json "${json}      \"type\": \"default\",\n")
@@ -148,14 +187,25 @@ function(__write_msvs_launch_vs_json targetName targetArgs)
         set(json "${json}      \"env\": {\n")
         set(json "${json}        \"PATH\": \"\${env.PATH};${qtPath}/bin\"\n")
         set(json "${json}      }\n")
-        set(json "${json}    }${comma}\n")
+        set(json "${json}    },\n")
     endmacro(add)
-    add("x32-Debug-Windows/Debug"            "${Qt5x32Path}" ",")
-    add("x32-Release-Windows/RelWithDebInfo" "${Qt5x32Path}" ",")
-    add("x32-RelNoDebInfo-Windows/Release"   "${Qt5x32Path}" ",")
-    add("x64-Debug-Windows/Debug"            "${Qt5x64Path}" ",")
-    add("x64-Release-Windows/RelWithDebInfo" "${Qt5x64Path}" ",")
-    add("x64-RelNoDebInfo-Windows/Release"   "${Qt5x64Path}" "")
+
+    foreach(target ${targets})
+        string(REGEX MATCH "^([_a-zA-Z0-9\\-]+)[ ]*(.*)$" matched "${target}")
+        if(${CMAKE_MATCH_COUNT} EQUAL 0)
+            message(FATAL_ERROR "Wrong target format (actual='${target}', expected='name args').")
+        endif()
+
+        set(targetName ${CMAKE_MATCH_1})
+        set(targetArgs ${CMAKE_MATCH_2})
+        message("targetName=${targetName} targetArgs=[${targetArgs}]")
+
+        add("x32-Debug-Windows/Debug"              "${Qt5x32Path}" "${targetName}" "${targetArgs}")
+        add("x32-Release-Windows/RelWithDebInfo"   "${Qt5x32Path}" "${targetName}" "${targetArgs}")
+        add("x64-Debug-Windows/Debug"              "${Qt5x64Path}" "${targetName}" "${targetArgs}")
+        add("x64-Release-Windows/RelWithDebInfo"   "${Qt5x64Path}" "${targetName}" "${targetArgs}")
+    endforeach()
+
     set(json "${json}  ]\n")
     set(json "${json}}\n")
 

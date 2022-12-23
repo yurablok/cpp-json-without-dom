@@ -60,7 +60,7 @@ For faster key matching, it is recommended to use
 json_reader json;
 json = string_to_parse;
 assert(json.is_object());
-json.parse([&json](json_parse::key_t key, const json_parse::value_t& value) {
+json.parse([&json](json_reader::key_t key, const json_reader::value_t& value) {
     switch_str(key, "number", "array") {
     case_str("number"):
         if (!value.is_number()) {
@@ -72,7 +72,7 @@ json.parse([&json](json_parse::key_t key, const json_parse::value_t& value) {
         if (!value.is_array()) {
             return;
         }
-        json.parse([](uint32_t index, const json_parse::value_t& value) {
+        json.parse([](uint32_t index, const json_reader::value_t& value) {
             switch (index) {
             case 0:
                 assert(value.is_string());

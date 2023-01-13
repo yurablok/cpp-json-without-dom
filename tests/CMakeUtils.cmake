@@ -2,7 +2,7 @@
 # https://github.com/yurablok/cmake-cpp-template
 #
 # History:
-# v0.2  2022-Nov-20     Added support for Windows ARM64.
+# v0.2  2022-Dec-24     Added support for Windows ARM64.
 # v0.1  2022-Oct-18     First release.
 
 # Call it before the main `project(...)`
@@ -204,6 +204,8 @@ function(__write_msvs_launch_vs_json targets)
         add("x32-Release-Windows/RelWithDebInfo"   "${Qt5x32Path}" "${targetName}" "${targetArgs}")
         add("x64-Debug-Windows/Debug"              "${Qt5x64Path}" "${targetName}" "${targetArgs}")
         add("x64-Release-Windows/RelWithDebInfo"   "${Qt5x64Path}" "${targetName}" "${targetArgs}")
+        add("arm64-Debug-Windows/Debug"            "${Qt5x64Path}" "${targetName}" "${targetArgs}")
+        add("arm64-Release-Windows/RelWithDebInfo" "${Qt5x64Path}" "${targetName}" "${targetArgs}")
     endforeach()
 
     set(json "${json}  ]\n")

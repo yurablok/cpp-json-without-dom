@@ -97,16 +97,20 @@ assert(json.error == nullptr);
 
 ### Comparison with alternatives:
 
-|                             Tool                                   | Read bench, % | Write bench, % |       Encoding        |
-| :----------------------------------------------------------------: | :-----------: | :------------: | :-------------------: |
-| [JSON for Modern C++](https://github.com/nlohmann/json)            |      502      |       497      |         UTF-8         |
-| [RapidJSON](https://github.com/Tencent/rapidjson)                  |      136      | 82<sub>1</sub> | UTF-8, UTF-16, UTF-32 |
-| [minijson_reader](https://github.com/giacomodrago/minijson_reader) |      121      |                |     UTF-8, UTF-16?    |
-| [minijson_writer](https://github.com/giacomodrago/minijson_writer) |               |641<sub>2</sub> |     UTF-8, UTF-16?    |
-|  C++ JSON without DOM                                              |      100      |       100      |         UTF-8         |
+|                     Tool                     | Read bench, % | Write bench, % |       Encoding        |
+| :------------------------------------------: | :-----------: | :------------: | :-------------------: |
+| [JSON for Modern C++][1]                     |      441      |       637      |         UTF-8         |
+| [RapidJSON][2]                               |      130      | 100<sub>1</sub>| UTF-8, UTF-16, UTF-32 |
+| [minijson_reader][3]<br>[minijson_writer][4] |      117      | 856<sub>2</sub>|     UTF-8, UTF-16?    |
+|  C++ JSON without DOM                        |      100      |       111      |         UTF-8         |
 
 1. SAX style API that requires an explicit call to object/array begin/end.
 2. Due to slow `std::ostringstream`.
 
 You can see benchmarks of other libs here
 [miloyip/nativejson-benchmark](https://github.com/miloyip/nativejson-benchmark#parsing-time).
+
+[1]: https://github.com/nlohmann/json
+[2]: https://github.com/Tencent/rapidjson
+[3]: https://github.com/giacomodrago/minijson_reader
+[4]: https://github.com/giacomodrago/minijson_writer

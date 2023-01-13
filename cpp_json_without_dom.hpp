@@ -6,6 +6,7 @@
 // License: BSL-1.0
 // https://github.com/yurablok/cpp-json-without-dom
 // History:
+// v0.8 2023-Jan-13     Optimized json_writer by 20%.
 // v0.7 2022-Apr-21     json_reader now works with two types of handlers (object and array).
 // v0.6 2022-Mar-24     Proper handling of `double` in `charconv` support in GCC.
 // v0.5 2021-Dec-24     Autoconvert `nan` and `inf` to `null` in json_writer.
@@ -351,13 +352,13 @@ struct json_reader {
                     break;
                 default:
                     double v = 0.0;
-#               if defined(CJWD_CPP_LIB_CHARCONV_FLOAT)
+#                 if defined(CJWD_CPP_LIB_CHARCONV_FLOAT)
                     auto [ptr, ec] = std::from_chars(beginStr, begin, v);
                     if (ptr != begin || ec != std::errc()) {
                         error = ptr;
                         return;
                     }
-#               else
+#                 else
                     char format[8];
                     std::snprintf(format, sizeof(format), "%%%ulf",
                         static_cast<uint32_t>(begin - beginStr));
@@ -365,7 +366,7 @@ struct json_reader {
                         error = beginStr;
                         return;
                     }
-#               endif
+#                 endif
                     --begin;
                     if (handler) {
                         value.emplace<number_idx>(v);
@@ -552,13 +553,13 @@ struct json_reader {
                     break;
                 default:
                     double v = 0.0;
-#               if defined(CJWD_CPP_LIB_CHARCONV_FLOAT)
+#                 if defined(CJWD_CPP_LIB_CHARCONV_FLOAT)
                     auto [ptr, ec] = std::from_chars(beginStr, begin, v);
                     if (ptr != begin || ec != std::errc()) {
                         error = ptr;
                         return;
                     }
-#               else
+#                 else
                     char format[8];
                     std::snprintf(format, sizeof(format), "%%%ulf",
                         static_cast<uint32_t>(begin - beginStr));
@@ -566,7 +567,7 @@ struct json_reader {
                         error = beginStr;
                         return;
                     }
-#               endif
+#                 endif
                     --begin;
                     if (handler) {
                         value.emplace<number_idx>(v);
@@ -637,7 +638,7 @@ struct json_reader {
 
 struct json_writer {
 private:
-    uint32_t lastComma = 0;
+    size_t lastComma = 0;
     uint8_t level = 0;
     bool singleLine = false;
     bool isPrevKey = false;
@@ -646,7 +647,7 @@ private:
             isPrevKey = false;
             return;
         }
-        if (removeComma && lastComma > 0) {
+        if (removeComma & lastComma > 0) {
             buffer[lastComma] = ' ';
         }
         lastComma = 0;
@@ -655,45 +656,40 @@ private:
             return;
         }
         buffer.push_back('\n');
-        for (uint8_t i = 0; i < level * tabSize; ++i) {
-            buffer.push_back(' ');
+        buffer.resize(buffer.size() + static_cast<size_t>(level) * tabSize, ' ');
+    }
+    inline void append(const std::string_view str) {
+        for (const char c : str) {
+            buffer.push_back(c);
         }
     }
     void string(const std::string_view str) {
-        for (const auto c : str) {
+        for (const char c : str) {
             switch (c - 8) {
             //case '/':
             case '\b' - 8: // 08
-                buffer.push_back('\\');
-                buffer.push_back('b');
+                append("\\b");
                 break;
             case '\t' - 8: // 09
-                buffer.push_back('\\');
-                buffer.push_back('t');
+                append("\\t");
                 break;
             case '\n' - 8: // 10
-                buffer.push_back('\\');
-                buffer.push_back('n');
+                append("\\n");
                 break;
             case 11 - 8: //   11
-                buffer.push_back('\\');
-                buffer.push_back('?');
+                append("\\?");
                 break;
             case '\f' - 8: // 12
-                buffer.push_back('\\');
-                buffer.push_back('f');
+                append("\\f");
                 break;
             case '\r' - 8: // 13
-                buffer.push_back('\\');
-                buffer.push_back('r');
+                append("\\r");
                 break;
             case '"' - 8: //  34
-                buffer.push_back('\\');
-                buffer.push_back('"');
+                append("\\\"");
                 break;
             case '\\' - 8: // 92
-                buffer.push_back('\\');
-                buffer.push_back('\\');
+                append("\\\\");
                 break;
             default:
                 buffer.push_back(c);
@@ -719,7 +715,7 @@ public:
             
             if (handler) {
                 ++writer->level;
-                if (flags_ == flags::single_line && !writer->singleLine) {
+                if (flags_ == flags::single_line & !writer->singleLine) {
                     writer->singleLine = true;
                     handler({ writer });
                     --writer->level;
@@ -733,9 +729,8 @@ public:
                     writer->tab(true);
                 }
             }
-            writer->buffer.push_back('}');
-            writer->lastComma = static_cast<uint32_t>(writer->buffer.size());
-            writer->buffer.push_back(',');
+            writer->append("},");
+            writer->lastComma = writer->buffer.size() - 1;
             return { writer };
         }
         object_t array(std::function<void(array_t json)> handler,
@@ -745,7 +740,7 @@ public:
 
             if (handler) {
                 ++writer->level;
-                if (flags_ == flags::single_line && !writer->singleLine) {
+                if (flags_ == flags::single_line & !writer->singleLine) {
                     writer->singleLine = true;
                     handler({ writer });
                     --writer->level;
@@ -759,9 +754,8 @@ public:
                     writer->tab(true);
                 }
             }
-            writer->buffer.push_back(']');
-            writer->lastComma = static_cast<uint32_t>(writer->buffer.size());
-            writer->buffer.push_back(',');
+            writer->append("],");
+            writer->lastComma = writer->buffer.size() - 1;
             return { writer };
         }
         template <typename bool_t,
@@ -769,54 +763,41 @@ public:
         object_t value(const bool_t boolean) {
             writer->tab(false);
             if (boolean) {
-                writer->buffer.push_back('t');
-                writer->buffer.push_back('r');
-                writer->buffer.push_back('u');
-                writer->buffer.push_back('e');
+                writer->append("true,");
             }
             else {
-                writer->buffer.push_back('f');
-                writer->buffer.push_back('a');
-                writer->buffer.push_back('l');
-                writer->buffer.push_back('s');
-                writer->buffer.push_back('e');
+                writer->append("false,");
             }
-            writer->lastComma = static_cast<uint32_t>(writer->buffer.size());
-            writer->buffer.push_back(',');
+            writer->lastComma = writer->buffer.size() - 1;
             return { writer };
         }
         object_t value(std::nullptr_t = nullptr) {
             writer->tab(false);
-            writer->buffer.push_back('n');
-            writer->buffer.push_back('u');
-            writer->buffer.push_back('l');
-            writer->buffer.push_back('l');
-            writer->lastComma = static_cast<uint32_t>(writer->buffer.size());
-            writer->buffer.push_back(',');
+            writer->append("null,");
+            writer->lastComma = writer->buffer.size() - 1;
             return { writer };
         }
         object_t value(const std::string_view string) {
             writer->tab(false);
             writer->buffer.push_back('"');
             writer->string(string);
-            writer->buffer.push_back('"');
-            writer->lastComma = static_cast<uint32_t>(writer->buffer.size());
-            writer->buffer.push_back(',');
+            writer->append("\",");
+            writer->lastComma = writer->buffer.size() - 1;
             return { writer };
         }
-#   ifdef __cpp_lib_char8_t
+#     ifdef __cpp_lib_char8_t
         object_t value(const std::u8string_view string) {
             return value(std::string_view(reinterpret_cast<const char*>(string.data()), string.size()));
         }
-#   endif // __cpp_lib_char8_t
+#     endif // __cpp_lib_char8_t
         object_t value(const double number) {
-            if (std::isnan(number) || std::isinf(number)) {
+            if (std::isnan(number) | std::isinf(number)) {
                 return value(nullptr);
             }
             writer->tab(false);
             const auto size = writer->buffer.size();
             writer->buffer.resize(size + 32);
-#       if defined(CJWD_CPP_LIB_CHARCONV_FLOAT)
+#         if defined(CJWD_CPP_LIB_CHARCONV_FLOAT)
             const auto [ptr, ec] = std::to_chars(
                 writer->buffer.data() + size,
                 writer->buffer.data() + size + 32,
@@ -825,7 +806,7 @@ public:
             if (ec == std::errc()) {
                 writer->buffer.resize(ptr - writer->buffer.data());
             }
-#       else
+#         else
             const int32_t length = std::trunc(number) == number
                 ? std::snprintf(const_cast<char*>(
                     writer->buffer.data() + size), 32, "%.0f", number)
@@ -834,12 +815,12 @@ public:
             if (length > 0) {
                 writer->buffer.resize(size + length);
             }
-#       endif
+#         endif
             else {
                 writer->isPrevKey = true; // skip tab()
                 value(nullptr);
             }
-            writer->lastComma = static_cast<uint32_t>(writer->buffer.size());
+            writer->lastComma = writer->buffer.size();
             writer->buffer.push_back(',');
             return { writer };
         }
@@ -853,9 +834,7 @@ public:
             writer->tab(false);
             writer->buffer.push_back('"');
             writer->string(string);
-            writer->buffer.push_back('"');
-            writer->buffer.push_back(':');
-            writer->buffer.push_back(' ');
+            writer->append("\": ");
             writer->isPrevKey = true;
             return { writer };
         }
@@ -864,8 +843,7 @@ public:
                 return { writer };
             }
             writer->tab(false);
-            writer->buffer.push_back('/');
-            writer->buffer.push_back('/');
+            writer->append("//");
             writer->string(line);
             return { writer };
         }
@@ -882,7 +860,7 @@ public:
 
             if (handler) {
                 ++writer->level;
-                if (flags_ == flags::single_line && !writer->singleLine) {
+                if (flags_ == flags::single_line & !writer->singleLine) {
                     writer->singleLine = true;
                     handler({ writer });
                     --writer->level;
@@ -896,9 +874,8 @@ public:
                     writer->tab(true);
                 }
             }
-            writer->buffer.push_back('}');
-            writer->lastComma = static_cast<uint32_t>(writer->buffer.size());
-            writer->buffer.push_back(',');
+            writer->append("},");
+            writer->lastComma = writer->buffer.size() - 1;
             return *this;
         }
         array_t& array(std::function<void(array_t json)> handler,
@@ -908,7 +885,7 @@ public:
 
             if (handler) {
                 ++writer->level;
-                if (flags_ == flags::single_line && !writer->singleLine) {
+                if (flags_ == flags::single_line & !writer->singleLine) {
                     writer->singleLine = true;
                     handler(*this);
                     --writer->level;
@@ -922,9 +899,8 @@ public:
                     writer->tab(true);
                 }
             }
-            writer->buffer.push_back(']');
-            writer->lastComma = static_cast<uint32_t>(writer->buffer.size());
-            writer->buffer.push_back(',');
+            writer->append("],");
+            writer->lastComma = writer->buffer.size() - 1;
             return *this;
         }
         template <typename bool_t,
@@ -932,54 +908,41 @@ public:
         array_t& value(const bool_t boolean) {
             writer->tab(false);
             if (boolean) {
-                writer->buffer.push_back('t');
-                writer->buffer.push_back('r');
-                writer->buffer.push_back('u');
-                writer->buffer.push_back('e');
+                writer->append("true,");
             }
             else {
-                writer->buffer.push_back('f');
-                writer->buffer.push_back('a');
-                writer->buffer.push_back('l');
-                writer->buffer.push_back('s');
-                writer->buffer.push_back('e');
+                writer->append("false,");
             }
-            writer->lastComma = static_cast<uint32_t>(writer->buffer.size());
-            writer->buffer.push_back(',');
+            writer->lastComma = writer->buffer.size() - 1;
             return *this;
         }
         array_t& value(std::nullptr_t = nullptr) {
             writer->tab(false);
-            writer->buffer.push_back('n');
-            writer->buffer.push_back('u');
-            writer->buffer.push_back('l');
-            writer->buffer.push_back('l');
-            writer->lastComma = static_cast<uint32_t>(writer->buffer.size());
-            writer->buffer.push_back(',');
+            writer->append("null,");
+            writer->lastComma = writer->buffer.size() - 1;
             return *this;
         }
         array_t& value(const std::string_view string) {
             writer->tab(false);
             writer->buffer.push_back('"');
             writer->string(string);
-            writer->buffer.push_back('"');
-            writer->lastComma = static_cast<uint32_t>(writer->buffer.size());
-            writer->buffer.push_back(',');
+            writer->append("\",");
+            writer->lastComma = writer->buffer.size() - 1;
             return *this;
         }
-#   ifdef __cpp_lib_char8_t
+#     ifdef __cpp_lib_char8_t
         array_t& value(const std::u8string_view string) {
             return value(std::string_view(reinterpret_cast<const char*>(string.data()), string.size()));
         }
-#   endif // __cpp_lib_char8_t
+#     endif // __cpp_lib_char8_t
         array_t& value(const double number) {
-            if (std::isnan(number) || std::isinf(number)) {
+            if (std::isnan(number) | std::isinf(number)) {
                 return value(nullptr);
             }
             writer->tab(false);
             const auto size = writer->buffer.size();
             writer->buffer.resize(size + 32);
-#       if defined(CJWD_CPP17_OR_GREATER)
+#         if defined(CJWD_CPP_LIB_CHARCONV_FLOAT)
             const auto [ptr, ec] = std::to_chars(
                 writer->buffer.data() + size,
                 writer->buffer.data() + size + 32,
@@ -988,7 +951,7 @@ public:
             if (ec == std::errc()) {
                 writer->buffer.resize(ptr - writer->buffer.data());
             }
-#       else
+#         else
             const int32_t length = std::trunc(number) == number
                 ? std::snprintf(const_cast<char*>(
                     writer->buffer.data() + size), 32, "%.0f", number)
@@ -997,12 +960,12 @@ public:
             if (length > 0) {
                 writer->buffer.resize(size + length);
             }
-#       endif
+#         endif
             else {
                 writer->isPrevKey = true; // skip tab()
                 value(nullptr);
             }
-            writer->lastComma = static_cast<uint32_t>(writer->buffer.size());
+            writer->lastComma = writer->buffer.size();
             writer->buffer.push_back(',');
             return *this;
         }
@@ -1011,8 +974,7 @@ public:
                 return *this;
             }
             writer->tab(false);
-            writer->buffer.push_back('/');
-            writer->buffer.push_back('/');
+            writer->append("//");
             writer->string(line);
             return *this;
         }

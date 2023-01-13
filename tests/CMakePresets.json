@@ -6,7 +6,9 @@
     { "name": "x32-Debug-Windows", "displayName": "Preset", "configurePreset": "x32-Debug-Windows" },
     { "name": "x32-Release-Windows", "displayName": "Preset", "configurePreset": "x32-Release-Windows" },
     { "name": "x64-Debug-Windows", "displayName": "Preset", "configurePreset": "x64-Debug-Windows" },
-    { "name": "x64-Release-Windows", "displayName": "Preset", "configurePreset": "windows-default" }
+    { "name": "x64-Release-Windows", "displayName": "Preset", "configurePreset": "windows-default" },
+    { "name": "arm64-Debug-Windows", "displayName": "Preset", "configurePreset": "arm64-Debug-Windows" },
+    { "name": "arm64-Release-Windows", "displayName": "Preset", "configurePreset": "arm64-Release-Windows" },
   ],
   "configurePresets": [
     {
@@ -83,6 +85,34 @@
       "generator": "Visual Studio 17 2022",
       "binaryDir": "${sourceDir}/build/.cmake/x64-Release-Windows",
       "architecture": { "value": "x64", "strategy": "set" },
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "CMAKE_CONFIGURATION_TYPES": "RelWithDebInfo"
+      },
+      "vendor": {
+        "microsoft.com/VisualStudioSettings/CMake/1.0": { "hostOS": [ "Windows" ] }
+      }
+    },
+    {
+      "name": "arm64-Debug-Windows",
+      "displayName": "arm64-Debug-Windows",
+      "generator": "Visual Studio 17 2022",
+      "binaryDir": "${sourceDir}/build/.cmake/${presetName}",
+      "architecture": { "value": "ARM64", "strategy": "set" },
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_CONFIGURATION_TYPES": "Debug"
+      },
+      "vendor": {
+        "microsoft.com/VisualStudioSettings/CMake/1.0": { "hostOS": [ "Windows" ] }
+      }
+    },
+    {
+      "name": "arm64-Release-Windows",
+      "displayName": "arm64-Release-Windows",
+      "generator": "Visual Studio 17 2022",
+      "binaryDir": "${sourceDir}/build/.cmake/${presetName}",
+      "architecture": { "value": "ARM64", "strategy": "set" },
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "RelWithDebInfo",
         "CMAKE_CONFIGURATION_TYPES": "RelWithDebInfo"

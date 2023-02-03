@@ -447,7 +447,6 @@ void benchmark() {
 
     Benchmark bench;
     bench.setColumnsNumber(2);
-    static volatile int32_t number = 0;
 
     // =========================================================================
     //      _ ____   ___  _   _    __              __  __           _                    ____            
@@ -456,10 +455,11 @@ void benchmark() {
     // | |_| |___) | |_| | |\  | |  _| (_) | |    | |  | | (_) | (_| |  __/ |  | | | | | |__|_   _|_   _|
     //  \___/|____/ \___/|_| \_| |_|  \___/|_|    |_|  |_|\___/ \__,_|\___|_|  |_| |_|  \____||_|   |_|  
 
-    bench.add("nlohmann_json", 0, [&](uint32_t) {
+    bench.add("nlohmann_json", 0, [&](uint32_t) -> uint32_t {
+        uint32_t chsum = 0;
         nlohmann::json json = nlohmann::json::parse(addressbookJson.begin(), addressbookJson.end());
         if (!json.is_array()) {
-            return;
+            return chsum;
         }
         for (const auto& it : json) {
             if (!it.is_object()) {
@@ -467,15 +467,15 @@ void benchmark() {
             }
             const auto itName = it.find("name");
             if (itName != it.end() && itName->is_string()) {
-                number = itName->get<std::string_view>().size();
+                chsum += itName->get<std::string_view>().size();
             }
             const auto itId = it.find("id");
             if (itId != it.end() && itId->is_number()) {
-                number = itId->get<double>();
+                chsum += itId->get<double>();
             }
             const auto itEmail = it.find("email");
             if (itEmail != it.end() && itEmail->is_string()) {
-                number = itEmail->get<std::string_view>().size();
+                chsum += itEmail->get<std::string_view>().size();
             }
             const auto itPhones = it.find("phones");
             if (itPhones != it.end() && itPhones->is_array()) {
@@ -485,11 +485,11 @@ void benchmark() {
                     }
                     const auto itNumber = itPhone.find("number");
                     if (itNumber != itPhone.end() && itNumber->is_string()) {
-                        number = itNumber->get<std::string_view>().size();
+                        chsum += itNumber->get<std::string_view>().size();
                     }
                     const auto itType = itPhone.find("type");
                     if (itType != itPhone.end() && itType->is_string()) {
-                        number = itType->get<std::string_view>().size();
+                        chsum += itType->get<std::string_view>().size();
                     }
                 }
             }
@@ -497,20 +497,21 @@ void benchmark() {
             if (itEmployment != it.end() && itEmployment->is_object()) {
                 const auto itVariant = itEmployment->find("variant");
                 if (itVariant != itEmployment->end() && itVariant->is_string()) {
-                    number = itVariant->get<std::string_view>().size();
+                    chsum += itVariant->get<std::string_view>().size();
                 }
                 const auto itText = itEmployment->find("text");
                 if (itText != itEmployment->end() && itText->is_string()) {
-                    number = itText->get<std::string_view>().size();
+                    chsum += itText->get<std::string_view>().size();
                 }
             }
         }
+        return chsum;
     });
 
     // =========================================================================
 
     nlohmann::json json_nl;
-    bench.add("nlohmann_json", 1, [&](uint32_t) {
+    bench.add("nlohmann_json", 1, [&](uint32_t) -> uint32_t {
         json_nl.clear();
         for (const auto& person : addressbookData) {
             nlohmann::json personObj;
@@ -530,7 +531,7 @@ void benchmark() {
             }
             json_nl.push_back(std::move(personObj));
         }
-        number = json_nl.dump(2).size();
+        return json_nl.dump(2).size();
     });
 
     // =========================================================================
@@ -541,11 +542,12 @@ void benchmark() {
     // |_| \_\__,_| .__/|_|\__,_|\___/|____/ \___/|_| \_|
     //            |_|                                    
 
-    bench.add("rapidjson", 0, [&](uint32_t) {
+    bench.add("rapidjson", 0, [&](uint32_t) -> uint32_t {
+        uint32_t chsum = 0;
         rapidjson::Document json;
         json.Parse(addressbookJson.data(), addressbookJson.size());
         if (!json.IsArray()) {
-            return;
+            return chsum;
         }
         for (const auto& it : json.GetArray()) {
             if (!it.IsObject()) {
@@ -553,15 +555,15 @@ void benchmark() {
             }
             const auto itName = it.FindMember("name");
             if (itName != it.MemberEnd() && itName->value.IsString()) {
-                number = itName->value.GetStringLength();
+                chsum += itName->value.GetStringLength();
             }
             const auto itId = it.FindMember("id");
             if (itId != it.MemberEnd() && itId->value.IsNumber()) {
-                number = itId->value.GetDouble();
+                chsum += itId->value.GetDouble();
             }
             const auto itEmail = it.FindMember("email");
             if (itEmail != it.MemberEnd() && itEmail->value.IsString()) {
-                number = itEmail->value.GetStringLength();
+                chsum += itEmail->value.GetStringLength();
             }
             const auto itPhones = it.FindMember("phones");
             if (itPhones != it.MemberEnd() && itPhones->value.IsArray()) {
@@ -571,11 +573,11 @@ void benchmark() {
                     }
                     const auto itNumber = itPhone.FindMember("number");
                     if (itNumber != itPhone.MemberEnd() && itNumber->value.IsString()) {
-                        number = itNumber->value.GetStringLength();
+                        chsum += itNumber->value.GetStringLength();
                     }
                     const auto itType = itPhone.FindMember("type");
                     if (itType != itPhone.MemberEnd() && itType->value.IsString()) {
-                        number = itType->value.GetStringLength();
+                        chsum += itType->value.GetStringLength();
                     }
                 }
             }
@@ -583,20 +585,21 @@ void benchmark() {
             if (itEmployment != it.MemberEnd() && itEmployment->value.IsObject()) {
                 const auto itVariant = itEmployment->value.FindMember("variant");
                 if (itVariant != itEmployment->value.MemberEnd() && itVariant->value.IsString()) {
-                    number = itVariant->value.GetStringLength();
+                    chsum += itVariant->value.GetStringLength();
                 }
                 const auto itText = itEmployment->value.FindMember("text");
                 if (itText != itEmployment->value.MemberEnd() && itText->value.IsString()) {
-                    number = itText->value.GetStringLength();
+                    chsum += itText->value.GetStringLength();
                 }
             }
         }
+        return chsum;
     });
 
     // =========================================================================
 
     rapidjson::StringBuffer buffer_rj;
-    bench.add("rapidjson", 1, [&](uint32_t) {
+    bench.add("rapidjson", 1, [&](uint32_t) -> uint32_t {
         buffer_rj.Clear();
         rapidjson::PrettyWriter<rapidjson::StringBuffer> writer(buffer_rj);
         writer.SetIndent(' ', 2);
@@ -632,7 +635,7 @@ void benchmark() {
             writer.EndObject();
         }
         writer.EndArray();
-        number = buffer_rj.GetSize();
+        return buffer_rj.GetSize();
     });
 
     // =========================================================================
@@ -643,7 +646,8 @@ void benchmark() {
     // |_| |_| |_|_|_| |_|_|/ |___/\___/|_| |_|
     //                    |__/                 
 
-    bench.add("minijson", 0, [&](uint32_t) {
+    bench.add("minijson", 0, [&](uint32_t) -> uint32_t {
+        uint32_t chsum = 0;
         minijson::const_buffer_context json(addressbookJson.data(), addressbookJson.size());
         minijson::parse_array(json, [&](const minijson::value& value) {
             if (value.type() != minijson::Object) {
@@ -657,21 +661,21 @@ void benchmark() {
                         minijson::ignore(json);
                         break;
                     }
-                    number = std::string_view(value.as_string()).size();
+                    chsum += std::string_view(value.as_string()).size();
                     break;
                 case_str("id"):
                     if (value.type() != minijson::Number) {
                         minijson::ignore(json);
                         break;
                     }
-                    number = value.as_double();
+                    chsum += value.as_double();
                     break;
                 case_str("email"):
                     if (value.type() != minijson::String) {
                         minijson::ignore(json);
                         break;
                     }
-                    number = std::string_view(value.as_string()).size();
+                    chsum += std::string_view(value.as_string()).size();
                     break;
                 case_str("phones"):
                     if (value.type() != minijson::Array) {
@@ -690,14 +694,14 @@ void benchmark() {
                                     minijson::ignore(json);
                                     break;
                                 }
-                                number = std::string_view(value.as_string()).size();
+                                chsum += std::string_view(value.as_string()).size();
                                 break;
                             case_str("type"):
                                 if (value.type() != minijson::String) {
                                     minijson::ignore(json);
                                     break;
                                 }
-                                number = std::string_view(value.as_string()).size();
+                                chsum += std::string_view(value.as_string()).size();
                                 break;
                             default:
                                 minijson::ignore(json);
@@ -718,14 +722,14 @@ void benchmark() {
                                 minijson::ignore(json);
                                 break;
                             }
-                            number = std::string_view(value.as_string()).size();
+                            chsum += std::string_view(value.as_string()).size();
                             break;
                         case_str("text"):
                             if (value.type() != minijson::String) {
                                 minijson::ignore(json);
                                 break;
                             }
-                            number = std::string_view(value.as_string()).size();
+                            chsum += std::string_view(value.as_string()).size();
                             break;
                         default:
                             minijson::ignore(json);
@@ -739,12 +743,14 @@ void benchmark() {
                 }
             });
         });
+        return chsum;
     });
 
     // =========================================================================
 
-    bench.add("minijson", 1, [&](uint32_t) {
+    bench.add("minijson", 1, [&](uint32_t) -> uint32_t {
         std::ostringstream stream;
+        stream.sync_with_stdio(false);
         minijson::writer_configuration cfg;
         minijson::array_writer json(stream,
             minijson::writer_configuration().pretty_printing(true).indent_spaces(2)
@@ -771,7 +777,7 @@ void benchmark() {
             personObj.close();
         }
         json.close();
-        number = stream.str().size();
+        return stream.str().size();
     });
 
     // =========================================================================
@@ -781,11 +787,12 @@ void benchmark() {
     // | |__|_   _|_   _| | |_| |___) | |_| | |\  |  \ V  V /| | |_| | | | (_) | |_| | |_  | |_| | |_| | |  | |
     //  \____||_|   |_|    \___/|____/ \___/|_| \_|   \_/\_/ |_|\__|_| |_|\___/ \__,_|\__| |____/ \___/|_|  |_|
 
-    bench.add("cpp_json_without_dom", 0, [&](uint32_t) {
+    bench.add("cpp_json_without_dom", 0, [&](uint32_t) -> uint32_t {
+        uint32_t chsum = 0;
         json_reader json;
         json = addressbookJson;
         if (!json.is_array()) {
-            return;
+            return chsum;
         }
         json.parse([&](uint32_t index, const json_reader::value_t& value) {
             if (!value.is_object()) {
@@ -797,19 +804,19 @@ void benchmark() {
                     if (!value.is_string()) {
                         return;
                     }
-                    number = value.as_string().size();
+                    chsum += value.as_string().size();
                     break;
                 case_str("id"):
                     if (!value.is_number()) {
                         return;
                     }
-                    number = value.as_number();
+                    chsum += value.as_number();
                     break;
                 case_str("email"):
                     if (!value.is_string()) {
                         return;
                     }
-                    number = value.as_string().size();
+                    chsum += value.as_string().size();
                     break;
                 case_str("phones"):
                     if (!value.is_array()) {
@@ -825,13 +832,13 @@ void benchmark() {
                                 if (!value.is_string()) {
                                     return;
                                 }
-                                number = value.as_string().size();
+                                chsum += value.as_string().size();
                                 break;
                             case_str("type"):
                                 if (!value.is_string()) {
                                     return;
                                 }
-                                number = value.as_string().size();
+                                chsum += value.as_string().size();
                                 break;
                             default:
                                 break;
@@ -849,13 +856,13 @@ void benchmark() {
                             if (!value.is_string()) {
                                 return;
                             }
-                            number = value.as_string().size();
+                            chsum += value.as_string().size();
                             break;
                         case_str("text"):
                             if (!value.is_string()) {
                                 return;
                             }
-                            number = value.as_string().size();
+                            chsum += value.as_string().size();
                             break;
                         default:
                             break;
@@ -868,12 +875,13 @@ void benchmark() {
             });
         });
         assert(json.error == nullptr);
+        return chsum;
     });
 
     // =========================================================================
 
     json_writer json_wd;
-    bench.add("cpp_json_without_dom", 1, [&](uint32_t) {
+    bench.add("cpp_json_without_dom", 1, [&](uint32_t) -> uint32_t {
         json_wd.array([&](json_writer::array_t json) {
         for (const auto& person : addressbookData) {
             json
@@ -899,7 +907,7 @@ void benchmark() {
                 });
             });
         }});
-        number = json_wd.buffer.size();
+        return json_wd.buffer.size();
     });
 
     // =========================================================================

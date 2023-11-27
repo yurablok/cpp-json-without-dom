@@ -6,6 +6,7 @@
 // License: BSL-1.0
 // https://github.com/yurablok/cpp-json-without-dom
 // History:
+// v0.9 2023-Nov-27     Added `sameLine` flag for json_writer.
 // v0.8 2023-Jan-13     Optimized json_writer by 20%.
 // v0.7 2022-Apr-21     json_reader now works with two types of handlers (object and array).
 // v0.6 2022-Mar-24     Proper handling of `double` in `charconv` support in GCC.
@@ -642,7 +643,7 @@ private:
     uint8_t level = 0;
     bool singleLine = false;
     bool isPrevKey = false;
-    void tab(const bool removeComma) {
+    void tab(const bool removeComma, const bool sameLine) {
         if (isPrevKey) {
             isPrevKey = false;
             return;
@@ -651,7 +652,7 @@ private:
             buffer[lastComma] = ' ';
         }
         lastComma = 0;
-        if (singleLine) {
+        if (singleLine | sameLine) {
             buffer.push_back(' ');
             return;
         }
@@ -710,7 +711,7 @@ public:
     struct value_t {
         object_t object(std::function<void(object_t json)> handler,
                 const flags flags_ = flags::none) {
-            writer->tab(false);
+            writer->tab(false, false);
             writer->buffer.push_back('{');
             
             if (handler) {
@@ -719,14 +720,14 @@ public:
                     writer->singleLine = true;
                     handler({ writer });
                     --writer->level;
-                    writer->tab(true);
+                    writer->tab(true, false);
                     writer->buffer.pop_back();
                     writer->singleLine = false;
                 }
                 else {
                     handler({ writer });
                     --writer->level;
-                    writer->tab(true);
+                    writer->tab(true, false);
                 }
             }
             writer->append("},");
@@ -735,7 +736,7 @@ public:
         }
         object_t array(std::function<void(array_t json)> handler,
                 const flags flags_ = flags::none) {
-            writer->tab(false);
+            writer->tab(false, false);
             writer->buffer.push_back('[');
 
             if (handler) {
@@ -744,14 +745,14 @@ public:
                     writer->singleLine = true;
                     handler({ writer });
                     --writer->level;
-                    writer->tab(true);
+                    writer->tab(true, false);
                     writer->buffer.pop_back();
                     writer->singleLine = false;
                 }
                 else {
                     handler({ writer });
                     --writer->level;
-                    writer->tab(true);
+                    writer->tab(true, false);
                 }
             }
             writer->append("],");
@@ -761,7 +762,7 @@ public:
         template <typename bool_t,
             typename = typename std::enable_if<std::is_same<bool_t, bool>::value>::type>
         object_t value(const bool_t boolean) {
-            writer->tab(false);
+            writer->tab(false, false);
             if (boolean) {
                 writer->append("true,");
             }
@@ -772,13 +773,13 @@ public:
             return { writer };
         }
         object_t value(std::nullptr_t = nullptr) {
-            writer->tab(false);
+            writer->tab(false, false);
             writer->append("null,");
             writer->lastComma = writer->buffer.size() - 1;
             return { writer };
         }
         object_t value(const std::string_view string) {
-            writer->tab(false);
+            writer->tab(false, false);
             writer->buffer.push_back('"');
             writer->string(string);
             writer->append("\",");
@@ -794,7 +795,7 @@ public:
             if (std::isnan(number) | std::isinf(number)) {
                 return value(nullptr);
             }
-            writer->tab(false);
+            writer->tab(false, false);
             const auto size = writer->buffer.size();
             writer->buffer.resize(size + 32);
 #         if defined(CJWD_CPP_LIB_CHARCONV_FLOAT)
@@ -830,8 +831,8 @@ public:
         json_writer* writer = nullptr;
     };
     struct object_t {
-        value_t key(const std::string_view string) {
-            writer->tab(false);
+        value_t key(const std::string_view string, const bool sameLine = false) {
+            writer->tab(false, sameLine);
             writer->buffer.push_back('"');
             writer->string(string);
             writer->append("\": ");
@@ -842,7 +843,7 @@ public:
             if (writer->singleLine) {
                 return { writer };
             }
-            writer->tab(false);
+            writer->tab(false, false);
             writer->append("//");
             writer->string(line);
             return { writer };
@@ -855,7 +856,7 @@ public:
     struct array_t {
         array_t& object(std::function<void(object_t json)> handler,
                 const flags flags_ = flags::none) {
-            writer->tab(false);
+            writer->tab(false, false);
             writer->buffer.push_back('{');
 
             if (handler) {
@@ -864,14 +865,14 @@ public:
                     writer->singleLine = true;
                     handler({ writer });
                     --writer->level;
-                    writer->tab(true);
+                    writer->tab(true, false);
                     writer->buffer.pop_back();
                     writer->singleLine = false;
                 }
                 else {
                     handler({ writer });
                     --writer->level;
-                    writer->tab(true);
+                    writer->tab(true, false);
                 }
             }
             writer->append("},");
@@ -880,7 +881,7 @@ public:
         }
         array_t& array(std::function<void(array_t json)> handler,
                 const flags flags_ = flags::none) {
-            writer->tab(false);
+            writer->tab(false, false);
             writer->buffer.push_back('[');
 
             if (handler) {
@@ -889,14 +890,14 @@ public:
                     writer->singleLine = true;
                     handler(*this);
                     --writer->level;
-                    writer->tab(true);
+                    writer->tab(true, false);
                     writer->buffer.pop_back();
                     writer->singleLine = false;
                 }
                 else {
                     handler(*this);
                     --writer->level;
-                    writer->tab(true);
+                    writer->tab(true, false);
                 }
             }
             writer->append("],");
@@ -905,8 +906,8 @@ public:
         }
         template <typename bool_t,
             typename = typename std::enable_if<std::is_same<bool_t, bool>::value>::type>
-        array_t& value(const bool_t boolean) {
-            writer->tab(false);
+        array_t& value(const bool_t boolean, const bool sameLine = false) {
+            writer->tab(false, sameLine);
             if (boolean) {
                 writer->append("true,");
             }
@@ -916,14 +917,14 @@ public:
             writer->lastComma = writer->buffer.size() - 1;
             return *this;
         }
-        array_t& value(std::nullptr_t = nullptr) {
-            writer->tab(false);
+        array_t& value(std::nullptr_t = nullptr, const bool sameLine = false) {
+            writer->tab(false, sameLine);
             writer->append("null,");
             writer->lastComma = writer->buffer.size() - 1;
             return *this;
         }
-        array_t& value(const std::string_view string) {
-            writer->tab(false);
+        array_t& value(const std::string_view string, const bool sameLine = false) {
+            writer->tab(false, sameLine);
             writer->buffer.push_back('"');
             writer->string(string);
             writer->append("\",");
@@ -931,15 +932,18 @@ public:
             return *this;
         }
 #     ifdef __cpp_lib_char8_t
-        array_t& value(const std::u8string_view string) {
-            return value(std::string_view(reinterpret_cast<const char*>(string.data()), string.size()));
+        array_t& value(const std::u8string_view string, const bool sameLine = false) {
+            return value(
+                std::string_view(reinterpret_cast<const char*>(string.data()), string.size()),
+                sameLine
+            );
         }
 #     endif // __cpp_lib_char8_t
-        array_t& value(const double number) {
+        array_t& value(const double number, const bool sameLine = false) {
             if (std::isnan(number) | std::isinf(number)) {
                 return value(nullptr);
             }
-            writer->tab(false);
+            writer->tab(false, sameLine);
             const auto size = writer->buffer.size();
             writer->buffer.resize(size + 32);
 #         if defined(CJWD_CPP_LIB_CHARCONV_FLOAT)
@@ -973,7 +977,7 @@ public:
             if (writer->singleLine) {
                 return *this;
             }
-            writer->tab(false);
+            writer->tab(false, false);
             writer->append("//");
             writer->string(line);
             return *this;
@@ -1000,7 +1004,7 @@ public:
             handler({ this });
             --level;
         }
-        tab(true);
+        tab(true, false);
         buffer.push_back('}');
         return { this };
     }
@@ -1020,7 +1024,7 @@ public:
             handler({ this });
             --level;
         }
-        tab(true);
+        tab(true, false);
         buffer.push_back(']');
         return { this };
     }

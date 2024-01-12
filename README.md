@@ -120,6 +120,14 @@ assert(json.error == nullptr);
 | [minijson_reader][3]<br>[minijson_writer][4] |  3us 096ns | 156.9 |  14us 041ns |1213.9<sub>2</sub>|
 | C++ JSON without DOM                         |  1us 972ns |   100 |   1us 222ns | 105.6 |
 
+`GCC 12.3, Cortex-A72, 2.0 GHz`
+| Tool                                         | Read bench |   %   | Write bench |   %   |
+|:---------------------------------------------|-----------:|------:|------------:|------:|
+| [JSON for Modern C++][1]                     | 21us 996ns | 502.7 |  12us 422ns | 466.8 |
+| [RapidJSON][2]                               |  4us 374ns |   100 |   2us 661ns |100<sub>1</sub>|
+| [minijson_reader][3]<br>[minijson_writer][4] |  7us 695ns | 175.8 |  12us 851ns |482.8<sub>2</sub>|
+| C++ JSON without DOM                         |  5us 675ns | 129.7 |   5us 599ns | 210.4 |
+
 1. SAX style API that requires an explicit call to object/array begin/end.
 2. Due to slow `std::ostringstream`.
 3. Strange high kernel times.

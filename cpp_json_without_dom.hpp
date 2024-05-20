@@ -6,6 +6,7 @@
 // License: BSL-1.0
 // https://github.com/yurablok/cpp-json-without-dom
 // History:
+// v0.10 2024-May-20    Fixed `&` operator precedence.
 // v0.9 2023-Nov-27     Added `sameLine` flag for json_writer.
 // v0.8 2023-Jan-13     Optimized json_writer by 20%.
 // v0.7 2022-Apr-21     json_reader now works with two types of handlers (object and array).
@@ -648,7 +649,7 @@ private:
             isPrevKey = false;
             return;
         }
-        if (removeComma & lastComma > 0) {
+        if (removeComma & (lastComma > 0)) {
             buffer[lastComma] = ' ';
         }
         lastComma = 0;
@@ -716,7 +717,7 @@ public:
             
             if (handler) {
                 ++writer->level;
-                if (flags_ == flags::single_line & !writer->singleLine) {
+                if ((flags_ == flags::single_line) & !writer->singleLine) {
                     writer->singleLine = true;
                     handler({ writer });
                     --writer->level;
@@ -741,7 +742,7 @@ public:
 
             if (handler) {
                 ++writer->level;
-                if (flags_ == flags::single_line & !writer->singleLine) {
+                if ((flags_ == flags::single_line) & !writer->singleLine) {
                     writer->singleLine = true;
                     handler({ writer });
                     --writer->level;
@@ -861,7 +862,7 @@ public:
 
             if (handler) {
                 ++writer->level;
-                if (flags_ == flags::single_line & !writer->singleLine) {
+                if ((flags_ == flags::single_line) & !writer->singleLine) {
                     writer->singleLine = true;
                     handler({ writer });
                     --writer->level;
@@ -886,7 +887,7 @@ public:
 
             if (handler) {
                 ++writer->level;
-                if (flags_ == flags::single_line & !writer->singleLine) {
+                if ((flags_ == flags::single_line) & !writer->singleLine) {
                     writer->singleLine = true;
                     handler(*this);
                     --writer->level;
